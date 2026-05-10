@@ -1,0 +1,2 @@
+# Exclude Gemini CLI tooling from GitHub language statistics
+.gemini/** linguist-vendored
