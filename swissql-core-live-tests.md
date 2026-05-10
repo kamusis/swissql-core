@@ -18,10 +18,10 @@ PostgreSQL database.
 ## Database target
 
 - Database type: PostgreSQL
-- Host: `aws-0-ap-southeast-1.pooler.supabase.com`
+- Host: `<redacted>.pooler.supabase.com`
 - Port: `5432`
 - Database: `postgres`
-- Username: `postgres.kveutbsouxtikzvmfbxb`
+- Username: `<redacted>`
 - Password: provided via `SUPABASE_POSTGRES_PASSWORD`
 
 The password was referenced only through the environment variable and was not
