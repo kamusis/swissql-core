@@ -9,9 +9,10 @@ This skill helps you debug failing GitHub Actions workflows in pull requests.
 
 ## Process
 
-1. Use the `list_workflow_runs` tool to look up recent workflow runs for the pull request and their status
-2. Use the `summarize_job_log_failures` tool to get an AI summary of the logs for failed jobs
-3. If you need more information, use the `get_job_logs` or `get_workflow_run_logs` tool to get the full failure logs
+1. Use `gh run list` to look up recent workflow runs and their status
+2. Use `gh run view <run-id>` to identify which job/step failed
+3. Use `gh run view <run-id> --log-failed` (or `--log`) to fetch failure logs
+   - If you need API-level access (e.g., filter by PR, query artifacts), use `gh api` against the Actions endpoints
 4. Try to reproduce the failure locally in your environment
 5. Fix the failing build and verify the fix before committing changes
 

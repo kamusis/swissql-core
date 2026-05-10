@@ -62,7 +62,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ghcr.io/${{ github.repository_owner }}/swissql-backend
+            ghcr.io/${{ github.repository_owner }}/swissql-core
           tags: |
             type=raw,value=${{ steps.vars.outputs.version }}
             type=raw,value=latest,enable=${{ github.event_name == 'push' }}
