@@ -312,6 +312,80 @@ export SPRING_PROFILES_ACTIVE=local
 mvn -f swissql-backend/pom.xml test
 ```
 
+## CLI Configuration
+
+The CLI (`swissql`) is a thin client that calls the backend REST API. Its behaviour is controlled by three layers, applied in order of increasing precedence:
+
+```
+hardcoded default  <  config.json  <  CLI flag
+```
+
+The rightmost value always wins. A CLI flag always overrides config.json, and config.json always overrides the built-in default.
+
+### Config file
+
+Stored at `~/.swissql/config.json`. Created automatically with defaults on first run if absent.
+
+```json
+{
+  "server": "http://localhost:8080",
+  "connection_timeout_ms": 5000,
+  "output_format": "table",
+  "output": {
+    "table": {
+      "wide": false,
+      "expanded": false,
+      "max_col_width": 32,
+      "max_query_width": 60
+    }
+  },
+  "exec": {
+    "limit": 1000,
+    "fetch_size": 500,
+    "query_timeout_ms": 30000
+  }
+}
+```
+
+### Parameter reference
+
+| Parameter | Config key | CLI flag | Hardcoded default | Description |
+|---|---|---|---|---|
+| Backend URL | `server` | `-s, --server` | `http://localhost:8080` | SwissQL backend base URL |
+| Connect timeout | `connection_timeout_ms` | `--connection-timeout` | `5000` | Dial timeout to backend (ms) |
+| Output format | `output_format` | — | `table` | `table`, `csv`, `tsv`, `json` |
+| Wide columns | `output.table.wide` | — | `false` | Disable column truncation in table output |
+| Expanded rows | `output.table.expanded` | — | `false` | Render each row vertically in table output |
+| Max col width | `output.table.max_col_width` | — | `32` | Column truncation threshold (chars) |
+| Max query width | `output.table.max_query_width` | — | `60` | Truncation threshold for query/plan columns |
+| Row limit | `exec.limit` | `--limit` | `1000` | Max rows returned by `exec` |
+| Fetch size | `exec.fetch_size` | `--fetch-size` | `500` | JDBC fetch size hint for `exec` |
+| Query timeout | `exec.query_timeout_ms` | `--query-timeout` | `30000` | Query execution timeout for `exec` (ms) |
+| ASCII borders | — | `--plain` | `false` | Use ASCII table borders instead of Unicode |
+
+`output.table.*` settings only affect rendering when `output_format` is `table`.
+
+### Example: custom backend port
+
+If your backend runs on port 9090, set it once in config instead of passing `--server` every time:
+
+```bash
+# edit ~/.swissql/config.json
+{
+  "server": "http://localhost:9090"
+}
+
+# now all commands use port 9090 by default
+swissql connections list
+
+# override for a single command
+swissql --server http://prod:8080 connections list
+```
+
+### Legacy config migration
+
+If you have an existing `~/.swissql/config.json` with the old schema (top-level `display_wide`, `display_expanded`, `display.*`, `current_name`, `history` fields), the CLI will automatically migrate it to the new structure on first load and rewrite the file.
+
 ## Repository Structure
 
 ```text
