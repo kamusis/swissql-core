@@ -33,10 +33,10 @@ type OutputConfig struct {
 // TableConfig holds table-rendering options.
 type TableConfig struct {
 	// Wide disables column truncation when true.
-	Wide bool `json:"wide,omitempty"`
+	Wide bool `json:"wide"`
 
 	// Expanded renders each row vertically (one field per line).
-	Expanded bool `json:"expanded,omitempty"`
+	Expanded bool `json:"expanded"`
 
 	// MaxColWidth is the maximum column width in characters before truncation.
 	MaxColWidth int `json:"max_col_width,omitempty"`
