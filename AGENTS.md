@@ -290,4 +290,104 @@ Error codes: `INVALID_REQUEST`, `CONNECTION_NOT_FOUND`, `CONNECTION_DISABLED`, `
 - `SPRING_PROFILES_ACTIVE` — Spring profile (e.g., `local`)
 - `SWISSQL_DATA_DIR` — Override data directory for profiles and credentials
 - `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_DIR` — Directory for dynamic JDBC driver JARs
+- `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_ENABLED` — Enable/disable dynamic driver loading (default: `true`)
+- `SWISSQL_SERVER_PORT` — HTTP listening port (default: `8080`)
+- `SWISSQL_LOG_LEVEL` — Application log level for `com.swissql` (default: `INFO`)
+- `SWISSQL_POOL_MAX_SIZE` — HikariCP max pool size per profile (default: `5`)
+- `SWISSQL_POOL_MIN_IDLE` — HikariCP min idle connections per profile (default: `1`)
+- `SWISSQL_POOL_CONNECTION_TIMEOUT_MS` — HikariCP connection acquisition timeout in ms (default: `5000`)
+- `JAVA_OPTS` — Extra JVM flags (e.g., `-Xmx512m`)
 - Credential references: `env:VAR_NAME` in `credential_ref` field reads from environment at runtime
+
+---
+
+## Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Client["Client Layer"]
+        CLI["swissql-cli\n(Go / Cobra)"]
+        CURL["curl / HTTP client"]
+    end
+
+    subgraph Backend["swissql-backend (Spring Boot / Java 21)"]
+        direction TB
+
+        subgraph Controllers["Controllers (REST API :8080)"]
+            SC["SqlController\nPOST /v1/sql/execute"]
+            CC["ConnectionController\nGET|POST|PATCH|DELETE /v1/connections"]
+            DC["DriverController\nGET /v1/drivers\nPOST /v1/drivers/reload"]
+            STC["StatusController\nGET /v1/status\nGET /v1/capabilities"]
+        end
+
+        subgraph Services["Services"]
+            SES["SqlExecutionService"]
+            CPS["ConnectionProfileService"]
+            CPOOLS["ConnectionPoolService\n(HikariCP)"]
+            DS["DriverService"]
+            DIS["DbeaverImportService"]
+            PCS["ProfileCredentialResolver"]
+            SSV["SqlSafetyValidator"]
+        end
+
+        subgraph Storage["Storage"]
+            FPS["FileProfileStore\nconnections.json"]
+            CS["CredentialStore\ncredentials.json"]
+        end
+
+        subgraph Drivers["Driver Layer"]
+            DR["DriverRegistry\n(built-in + directory)"]
+            DAL["JdbcDriverAutoLoader\n(scans jdbc_drivers/)"]
+        end
+    end
+
+    subgraph DataDir["Data Directory (SWISSQL_DATA_DIR)"]
+        CONN["connections.json"]
+        CRED["credentials.json"]
+    end
+
+    subgraph DriverDir["Driver Directory (SWISSQL_JDBC_DRIVERS_AUTO_LOAD_DIR)"]
+        D1["oracle/\ndriver.json + ojdbc.jar"]
+        D2["mysql/\ndriver.json + connector.jar"]
+        D3["..."]
+    end
+
+    subgraph Databases["Target Databases"]
+        PG["PostgreSQL"]
+        ORA["Oracle"]
+        OTHER["MySQL / H2 / ..."]
+    end
+
+    CLI -->|HTTP REST| Controllers
+    CURL -->|HTTP REST| Controllers
+
+    SC --> SES
+    CC --> CPS
+    CC --> DIS
+    DC --> DS
+    STC --> DR
+
+    SES --> SSV
+    SES --> CPS
+    SES --> CPOOLS
+
+    CPS --> FPS
+    CPS --> PCS
+    CPS --> DR
+
+    CPOOLS --> PCS
+    CPOOLS -->|JDBC| Databases
+
+    PCS --> CS
+    DS --> DAL
+    DS --> DR
+    DAL --> DR
+
+    FPS --> CONN
+    CS --> CRED
+
+    DAL -->|scans| DriverDir
+    DR -->|built-in| PG
+    DR -->|built-in| ORA
+    DR -->|dynamic JAR| OTHER
+```

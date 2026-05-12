@@ -7,6 +7,7 @@ import com.swissql.driver.DriverRegistry;
 import com.swissql.storage.CredentialStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.nio.file.Path;
 
@@ -76,7 +77,7 @@ class SqlExecutionServiceValidationTest {
         }
         profileService.create(create);
 
-        ConnectionPoolService poolService = new ConnectionPoolService(null, resolver);
+        ConnectionPoolService poolService = new ConnectionPoolService(null, resolver, new MockEnvironment());
         return new SqlExecutionService(profileService, poolService);
     }
 
