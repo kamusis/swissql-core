@@ -13,6 +13,12 @@ connections, executing SQL, and inspecting JDBC drivers via the SwissQL backend.
 
 Run without a subcommand to see available commands.`,
 	SilenceErrors: true,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if fmtFlag, _ := cmd.Flags().GetString("output-format"); fmtFlag != "" {
+			return setOutputFormat(fmtFlag)
+		}
+		return nil
+	},
 }
 
 func Execute() error {
@@ -42,5 +48,9 @@ func init() {
 	rootCmd.PersistentFlags().Bool(
 		"plain", false,
 		"Use plain ASCII output instead of Unicode box-drawing characters.",
+	)
+	rootCmd.PersistentFlags().String(
+		"output-format", "",
+		"Output format: table, csv, tsv, or json. Overrides config file when set.",
 	)
 }
