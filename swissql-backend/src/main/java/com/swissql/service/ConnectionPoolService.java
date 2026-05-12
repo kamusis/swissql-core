@@ -6,6 +6,7 @@ import com.swissql.util.JdbcConnectionInfoResolver;
 import com.swissql.util.ProfileDsn;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -16,16 +17,23 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ConnectionPoolService {
+    private static final int DEFAULT_MAX_POOL_SIZE = 5;
+    private static final int DEFAULT_MIN_IDLE = 1;
+    private static final long DEFAULT_CONNECTION_TIMEOUT_MS = 5000;
+
     private final Map<String, HikariDataSource> pools = new ConcurrentHashMap<>();
     private final JdbcConnectionInfoResolver jdbcConnectionInfoResolver;
     private final ProfileCredentialResolver credentialResolver;
+    private final Environment environment;
 
     public ConnectionPoolService(
             JdbcConnectionInfoResolver jdbcConnectionInfoResolver,
-            ProfileCredentialResolver credentialResolver
+            ProfileCredentialResolver credentialResolver,
+            Environment environment
     ) {
         this.jdbcConnectionInfoResolver = jdbcConnectionInfoResolver;
         this.credentialResolver = credentialResolver;
+        this.environment = environment;
     }
 
     public Connection getConnection(ConnectionProfile profile) throws SQLException {
@@ -96,13 +104,37 @@ public class ConnectionPoolService {
             config.setDriverClassName("org.postgresql.Driver");
             config.addDataSourceProperty("ApplicationName", "swissql");
         }
-        config.setConnectionTimeout(5000);
-        config.setMaximumPoolSize(5);
-        config.setMinimumIdle(1);
+        config.setConnectionTimeout(getLong("swissql.pool.connection-timeout-ms", DEFAULT_CONNECTION_TIMEOUT_MS));
+        config.setMaximumPoolSize(getInt("swissql.pool.max-size", DEFAULT_MAX_POOL_SIZE));
+        config.setMinimumIdle(getInt("swissql.pool.min-idle", DEFAULT_MIN_IDLE));
         config.setPoolName(poolName);
         return config;
     }
 
     public record TestResult(boolean ok, String message, long durationMs) {
+    }
+
+    private int getInt(String property, int defaultValue) {
+        String value = environment.getProperty(property);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private long getLong(String property, long defaultValue) {
+        String value = environment.getProperty(property);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 }

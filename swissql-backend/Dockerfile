@@ -18,10 +18,15 @@ WORKDIR /app
 
 COPY --from=build /workspace/swissql-server.jar /app/swissql-server.jar
 
-EXPOSE 8080
-
 ENV JAVA_OPTS=""
 ENV SPRING_CONFIG_ADDITIONAL_LOCATION="optional:file:/config/"
 ENV SPRING_CONFIG_IMPORT="optional:configtree:/run/secrets/"
+ENV SWISSQL_SERVER_PORT=8080
+ENV SWISSQL_LOG_LEVEL=INFO
+ENV SWISSQL_POOL_MAX_SIZE=5
+ENV SWISSQL_POOL_MIN_IDLE=1
+ENV SWISSQL_POOL_CONNECTION_TIMEOUT_MS=5000
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/swissql-server.jar"]
+EXPOSE ${SWISSQL_SERVER_PORT}
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/swissql-server.jar --server.port=${SWISSQL_SERVER_PORT}"]

@@ -28,6 +28,18 @@ AI Agent / Client / Thin CLI
 ```bash
 docker run -d --rm --name swissql-core \
   -p 8080:8080 \
+  -e SWISSQL_DATA_DIR=/app/data \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/kamusis/swissql-core
+```
+
+To use a custom port:
+
+```bash
+docker run -d --rm --name swissql-core \
+  -p 9090:9090 \
+  -e SWISSQL_SERVER_PORT=9090 \
+  -e SWISSQL_DATA_DIR=/app/data \
   -v $(pwd)/data:/app/data \
   ghcr.io/kamusis/swissql-core
 ```
@@ -181,6 +193,23 @@ ${SWISSQL_DATA_DIR:-./data}/
 ```
 
 Set `SWISSQL_DATA_DIR` or `swissql.data-dir` (Spring property) to override the default `./data` path.
+
+## Configuration
+
+All configuration is done via environment variables. Spring properties (e.g. in `application-local.properties`) are also accepted using the same names.
+
+| Environment Variable | Default | Description |
+|---|---|---|
+| `SWISSQL_SERVER_PORT` | `8080` | HTTP listening port |
+| `SWISSQL_LOG_LEVEL` | `INFO` | Log level for `com.swissql` (`DEBUG`, `INFO`, `WARN`, `ERROR`) |
+| `SWISSQL_DATA_DIR` | `./data` | Directory for `connections.json` and `credentials.json` |
+| `SWISSQL_POOL_MAX_SIZE` | `5` | HikariCP max pool size per connection profile |
+| `SWISSQL_POOL_MIN_IDLE` | `1` | HikariCP min idle connections per connection profile |
+| `SWISSQL_POOL_CONNECTION_TIMEOUT_MS` | `5000` | HikariCP connection acquisition timeout (ms) |
+| `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_DIR` | `/jdbc_drivers` | Directory scanned for dynamic JDBC driver JARs |
+| `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_ENABLED` | `true` | Enable or disable dynamic JDBC driver loading |
+| `JAVA_OPTS` | _(empty)_ | Extra JVM flags, e.g. `-Xmx512m -Xms256m` |
+| `SPRING_PROFILES_ACTIVE` | _(none)_ | Active Spring profile, e.g. `local` |
 
 ## Dynamic JDBC Drivers
 

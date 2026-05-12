@@ -6,6 +6,7 @@ import com.swissql.storage.CredentialStore;
 import com.swissql.util.JdbcConnectionInfoResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -28,7 +29,7 @@ class ConnectionPoolServiceTest {
 
         ProfileCredentialResolver credentialResolver = new ProfileCredentialResolver(new FailingCredentialStore());
         JdbcConnectionInfoResolver jdbcResolver = new JdbcConnectionInfoResolver(null);
-        ConnectionPoolService service = new ConnectionPoolService(jdbcResolver, credentialResolver);
+        ConnectionPoolService service = new ConnectionPoolService(jdbcResolver, credentialResolver, new MockEnvironment());
 
         ConnectionPoolService.TestResult result = service.testProfile(profile, 1000);
 
