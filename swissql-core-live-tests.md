@@ -302,7 +302,7 @@ Detailed results:
 Summary:
 
 ```text
-TOTAL PASS=9 FAIL=0
+TOTAL PASS=10 FAIL=0
 ```
 
 Detailed results:
