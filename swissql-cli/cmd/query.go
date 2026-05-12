@@ -503,10 +503,10 @@ func renderTextResponse(w io.Writer, resp *client.ExecuteResponse) {
 func init() {
 	cfg, err := config.LoadConfig()
 	if err == nil && cfg != nil {
-		displayWide = cfg.DisplayWide
-		displayExpanded = cfg.DisplayExpanded
-		displayMaxColWidth = cfg.Display.MaxColWidth
-		displayMaxQueryWidth = cfg.Display.MaxQueryWidth
+		displayWide = cfg.Output.Table.Wide
+		displayExpanded = cfg.Output.Table.Expanded
+		displayMaxColWidth = cfg.Output.Table.MaxColWidth
+		displayMaxQueryWidth = cfg.Output.Table.MaxQueryWidth
 		if err := setOutputFormat(cfg.OutputFormat); err == nil {
 			// already set
 		}

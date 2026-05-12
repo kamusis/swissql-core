@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/kamusis/swissql/swissql-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -19,19 +20,25 @@ func Execute() error {
 }
 
 func init() {
-	// Server configuration
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg == nil {
+		cfg = &config.Config{}
+		config.ApplyDefaults(cfg)
+	}
+
+	// Server configuration — default from config, overridable per invocation.
 	rootCmd.PersistentFlags().StringP(
-		"server", "s", "http://localhost:8080",
+		"server", "s", cfg.Server,
 		"Backend server URL",
 	)
 
-	// Timeout configuration (global)
+	// Connection timeout — default from config.
 	rootCmd.PersistentFlags().Int(
-		"connection-timeout", 5000,
+		"connection-timeout", cfg.ConnectionTimeoutMs,
 		"Connection timeout in milliseconds.",
 	)
 
-	// Output configuration (global)
+	// Output configuration (global).
 	rootCmd.PersistentFlags().Bool(
 		"plain", false,
 		"Use plain ASCII output instead of Unicode box-drawing characters.",

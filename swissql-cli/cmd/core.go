@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kamusis/swissql/swissql-cli/internal/client"
+	"github.com/kamusis/swissql/swissql-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -239,7 +240,13 @@ func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().String("profile-id", "", "Backend connection profile ID")
 	execCmd.Flags().Bool("allow-write", false, "Allow write or DDL statements")
-	execCmd.Flags().Int("limit", 1000, "Maximum rows to return")
-	execCmd.Flags().Int("fetch-size", 500, "JDBC fetch size")
-	execCmd.Flags().Int("query-timeout", 30000, "Query timeout in milliseconds")
+
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg == nil {
+		cfg = &config.Config{}
+		config.ApplyDefaults(cfg)
+	}
+	execCmd.Flags().Int("limit", cfg.Exec.Limit, "Maximum rows to return")
+	execCmd.Flags().Int("fetch-size", cfg.Exec.FetchSize, "JDBC fetch size")
+	execCmd.Flags().Int("query-timeout", cfg.Exec.QueryTimeoutMs, "Query timeout in milliseconds")
 }
