@@ -1,8 +1,8 @@
 # SwissQL Core live backend curl tests
 
-This document records the live backend integration test workflow that was run
+This document records the live backend integration test workflows that were run
 against the standalone `kamusis/swissql-core` repository using a real Supabase
-PostgreSQL database.
+PostgreSQL database and a self-contained dynamically loaded H2 JDBC driver.
 
 ## Test environment
 
@@ -15,6 +15,12 @@ PostgreSQL database.
 - Data directory: `/home/ubuntu/swissql-core-standalone-live-data`
 - Evidence directory: `/home/ubuntu/swissql-core-standalone-live-db-evidence`
 
+Additional hot-load test paths used for issue #2:
+
+- Data directory: `/home/ubuntu/swissql-core-issue-2-data`
+- Driver directory: `/home/ubuntu/swissql-core-issue-2-drivers`
+- Evidence directory: `/home/ubuntu/swissql-core-issue-2-evidence`
+
 ## Database target
 
 - Database type: PostgreSQL
@@ -26,6 +32,24 @@ PostgreSQL database.
 
 The password was referenced only through the environment variable and was not
 written into repository files or test output.
+
+## Dynamic JDBC driver target
+
+Issue #2 identified that the original live test only verified the driver list
+and reload endpoints with built-in drivers. It did not prove that a new JDBC
+driver JAR can be dropped into the configured driver directory, hot-loaded via
+`POST /v1/drivers/reload`, listed by `GET /v1/drivers`, and used for real SQL
+execution.
+
+The additional hot-load test used H2 because it is self-contained and requires
+no external database server:
+
+- Database type: `h2`
+- Driver JAR: `h2-2.2.224.jar`
+- Driver class: `org.h2.Driver`
+- Manifest path: `/home/ubuntu/swissql-core-issue-2-drivers/h2/driver.json`
+- Test profile: `h2-hotload-test`
+- Test DSN: `h2://localhost:1/mem:testdb;DB_CLOSE_DELAY=-1`
 
 ## Repository setup checks
 
@@ -119,6 +143,128 @@ The harness:
 7. Verified password update pool invalidation.
 8. Verified write and multi-statement guards.
 
+## Dynamic JDBC hot-load test command
+
+The backend was started with an initially empty `h2` driver directory containing
+only `driver.json`, so startup could prove that `h2` was not available before
+the JAR was dropped in at runtime:
+
+```bash
+rm -rf "/home/ubuntu/swissql-core-issue-2-data" \
+  "/home/ubuntu/swissql-core-issue-2-evidence" \
+  "/home/ubuntu/swissql-core-issue-2-drivers"
+mkdir -p "/home/ubuntu/swissql-core-issue-2-data" \
+  "/home/ubuntu/swissql-core-issue-2-evidence" \
+  "/home/ubuntu/swissql-core-issue-2-drivers/h2"
+
+curl -fL https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar \
+  -o "/home/ubuntu/swissql-core-issue-2-evidence/h2-2.2.224.jar"
+
+cat > "/home/ubuntu/swissql-core-issue-2-drivers/h2/driver.json" <<'EOF'
+{
+  "dbType": "h2",
+  "aliases": [],
+  "driverClass": "org.h2.Driver",
+  "jdbcUrlTemplate": "jdbc:h2:{database}",
+  "defaultPort": 0
+}
+EOF
+```
+
+Backend startup for the hot-load test:
+
+```bash
+JAVA_HOME="/home/ubuntu/.local/dev-tools/jdk-21.0.11+10" \
+PATH="/home/ubuntu/.local/dev-tools/apache-maven-3.9.9/bin:/home/ubuntu/.local/dev-tools/go/bin:/home/ubuntu/.local/dev-tools/jdk-21.0.11+10/bin:$PATH" \
+SWISSQL_DATA_DIR="/home/ubuntu/swissql-core-issue-2-data" \
+SWISSQL_JDBC_DRIVERS_AUTO_LOAD_DIR="/home/ubuntu/swissql-core-issue-2-drivers" \
+mvn -f "/home/ubuntu/repos/swissql-core-standalone/swissql-backend/pom.xml" \
+  spring-boot:run
+```
+
+Runtime hot-load checks:
+
+```bash
+BASE="http://localhost:8080"
+EVIDENCE="/home/ubuntu/swissql-core-issue-2-evidence"
+PROFILE="h2-hotload-test"
+
+curl -sS "$BASE/v1/drivers" \
+  -o "$EVIDENCE/drivers_before.body.json"
+jq -e '([.drivers[].db_type] | index("h2") == null)' \
+  "$EVIDENCE/drivers_before.body.json"
+
+cp "$EVIDENCE/h2-2.2.224.jar" \
+  "/home/ubuntu/swissql-core-issue-2-drivers/h2/h2-2.2.224.jar"
+
+curl -sS -X POST "$BASE/v1/drivers/reload" \
+  -o "$EVIDENCE/drivers_reload.body.json"
+jq -e '.status == "ok"
+  and .db_types_scanned == 1
+  and .driver_classes_registered == 1
+  and (.warnings|length == 0)' \
+  "$EVIDENCE/drivers_reload.body.json"
+
+curl -sS "$BASE/v1/drivers" \
+  -o "$EVIDENCE/drivers_after.body.json"
+jq -e '.drivers | any(.db_type == "h2"
+  and .source == "directory"
+  and .driver_class == "org.h2.Driver"
+  and (.jar_paths|length == 1))' \
+  "$EVIDENCE/drivers_after.body.json"
+
+curl -sS -X POST "$BASE/v1/connections" \
+  -H 'content-type: application/json' \
+  -d '{
+    "profile_id": "h2-hotload-test",
+    "name": "h2-hotload-test",
+    "db_type": "h2",
+    "dsn": "h2://localhost:1/mem:testdb;DB_CLOSE_DELAY=-1",
+    "username": "sa",
+    "password": "unused",
+    "save_password": true
+  }' \
+  -o "$EVIDENCE/create_h2_profile.body.json"
+
+curl -sS -X POST "$BASE/v1/sql/execute" \
+  -H 'content-type: application/json' \
+  -d '{
+    "profile_id": "h2-hotload-test",
+    "sql": "SELECT 1 AS answer",
+    "allow_write": false,
+    "options": {"timeout_ms": 30000}
+  }' \
+  -o "$EVIDENCE/execute_h2.body.json"
+jq -e '.type == "tabular"
+  and .metadata.profile_id == "h2-hotload-test"
+  and .metadata.db_type == "h2"
+  and .data.rows[0].ANSWER == 1' \
+  "$EVIDENCE/execute_h2.body.json"
+
+rm "/home/ubuntu/swissql-core-issue-2-drivers/h2/h2-2.2.224.jar"
+
+curl -sS -X POST "$BASE/v1/drivers/reload" \
+  -o "$EVIDENCE/drivers_reload_after_remove.body.json"
+jq -e '.status == "ok"
+  and .db_types_scanned == 1
+  and .driver_classes_registered == 0
+  and (.warnings | any(contains("No JDBC driver JARs found for dbType '\''h2'\''")))' \
+  "$EVIDENCE/drivers_reload_after_remove.body.json"
+
+curl -sS "$BASE/v1/drivers" \
+  -o "$EVIDENCE/drivers_after_remove.body.json"
+jq -e '.drivers | any(.db_type == "h2" and .source == "directory")' \
+  "$EVIDENCE/drivers_after_remove.body.json"
+
+curl -sS -X DELETE "$BASE/v1/connections/$PROFILE"
+```
+
+Observed behavior after removing the JAR and reloading: the reload endpoint
+returns a warning that the H2 JAR is missing, and the existing `h2` directory
+driver entry remains listed until backend restart. This is expected for this
+test because driver reload updates the registry and does not proactively close
+or rebuild existing loaded classes/pools.
+
 ## Live curl results
 
 Summary:
@@ -150,6 +296,29 @@ Detailed results:
 | `POST /v1/sql/execute` write guard | PASS | HTTP 400 `INVALID_REQUEST`, write requires `allow_write=true` |
 | `POST /v1/sql/execute` single-statement guard | PASS | HTTP 400 `INVALID_REQUEST`, exactly one SQL statement required |
 | `DELETE /v1/connections/{profile_id}` | PASS | DELETE HTTP 204, follow-up GET HTTP 404 |
+
+## Dynamic JDBC hot-load results
+
+Summary:
+
+```text
+TOTAL PASS=10 FAIL=0
+```
+
+Detailed results:
+
+| Test | Result | Observed |
+| --- | --- | --- |
+| Initial cleanup | PASS | DELETE existing `h2-hotload-test` profile returned HTTP 204 |
+| `GET /v1/status` | PASS | HTTP 200, backend healthy |
+| `GET /v1/drivers` before JAR drop | PASS | HTTP 200, `h2` absent |
+| `POST /v1/drivers/reload` after JAR drop | PASS | HTTP 200, `db_types_scanned=1`, `driver_classes_registered=1`, no warnings |
+| `GET /v1/drivers` after hot-load | PASS | HTTP 200, `h2` present with `source="directory"` and `driver_class="org.h2.Driver"` |
+| `POST /v1/connections` H2 profile | PASS | HTTP 201, profile created with configured credential |
+| `POST /v1/sql/execute` through H2 | PASS | HTTP 200, `answer=1` returned through dynamically loaded driver |
+| `POST /v1/drivers/reload` after JAR removal | PASS | HTTP 200, warning reports missing H2 JAR |
+| `GET /v1/drivers` after JAR removal | PASS | HTTP 200, `h2` remains listed until restart |
+| Cleanup H2 profile | PASS | DELETE returned HTTP 204 |
 
 ## Representative response evidence
 
@@ -200,6 +369,69 @@ Wrong-password pool invalidation response:
 }
 ```
 
+H2 hot-loaded driver reload response:
+
+```json
+{
+  "status": "ok",
+  "reloaded": {
+    "db_types_scanned": 1,
+    "driver_classes_registered": 1,
+    "warnings": []
+  },
+  "db_types_scanned": 1,
+  "driver_classes_registered": 1,
+  "warnings": []
+}
+```
+
+H2 driver list entry after reload:
+
+```json
+{
+  "db_type": "h2",
+  "source": "directory",
+  "driver_class": "org.h2.Driver",
+  "driver_classes": ["org.h2.Driver"],
+  "aliases": [],
+  "status": "loaded",
+  "warnings": [],
+  "jar_paths": [
+    "/home/ubuntu/swissql-core-issue-2-drivers/h2/h2-2.2.224.jar"
+  ],
+  "jdbc_url_template": "jdbc:h2:{database}",
+  "default_port": 0
+}
+```
+
+H2 SQL execution response:
+
+```json
+{
+  "type": "tabular",
+  "schema": null,
+  "data": {
+    "columns": [
+      {"name": "ANSWER", "type": "INTEGER"}
+    ],
+    "rows": [
+      {"ANSWER": 1}
+    ],
+    "text_content": null,
+    "file_url": null
+  },
+  "metadata": {
+    "profile_id": "h2-hotload-test",
+    "db_type": "h2",
+    "rows_returned": 1,
+    "truncated": false,
+    "rows_affected": 0,
+    "duration_ms": 207,
+    "next_page_token": null
+  }
+}
+```
+
 ## Scope note
 
 The earlier monorepo run included two legacy endpoint deprecation checks for
@@ -215,4 +447,5 @@ against the real Supabase PostgreSQL database:
 ```text
 Backend unit tests: 24 passed, 0 failed
 Live backend curl tests: 19 passed, 0 failed
+Dynamic JDBC hot-load tests: 10 passed, 0 failed
 ```
