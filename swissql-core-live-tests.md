@@ -447,5 +447,5 @@ against the real Supabase PostgreSQL database:
 ```text
 Backend unit tests: 24 passed, 0 failed
 Live backend curl tests: 19 passed, 0 failed
-Dynamic JDBC hot-load tests: 9 passed, 0 failed
+Dynamic JDBC hot-load tests: 10 passed, 0 failed
 ```
