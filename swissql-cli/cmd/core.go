@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -163,18 +164,36 @@ var coreDriversReloadCmd = &cobra.Command{
 }
 
 var execCmd = &cobra.Command{
-	Use:   "exec --profile-id <profile-id> <sql>",
+	Use:   "exec --profile-id <profile-id> [sql]",
 	Short: "Execute SQL through a backend connection profile",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClientFromFlags(cmd)
 		profileId := mustGetStringFlag(cmd, "profile-id")
 		if profileId == "" {
 			return fmt.Errorf("--profile-id is required")
 		}
+
+		filePath, _ := cmd.Flags().GetString("file")
+		var sql string
+		switch {
+		case filePath != "" && len(args) == 1:
+			return fmt.Errorf("--file and positional SQL argument are mutually exclusive")
+		case filePath != "":
+			b, err := os.ReadFile(filePath)
+			if err != nil {
+				return fmt.Errorf("failed to read SQL file: %w", err)
+			}
+			sql = string(b)
+		case len(args) == 1:
+			sql = args[0]
+		default:
+			return fmt.Errorf("SQL is required: provide it as a positional argument or via -f/--file")
+		}
+
 		resp, err := c.SqlExecute(&client.SqlExecuteRequest{
 			ProfileId:  profileId,
-			Sql:        args[0],
+			Sql:        sql,
 			AllowWrite: mustGetBoolFlag(cmd, "allow-write"),
 			Options: client.SqlExecuteOptions{
 				Limit:     mustGetIntFlag(cmd, "limit"),
@@ -240,6 +259,7 @@ func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().String("profile-id", "", "Backend connection profile ID")
 	execCmd.Flags().Bool("allow-write", false, "Allow write or DDL statements")
+	execCmd.Flags().StringP("file", "f", "", "Path to a SQL file to execute (mutually exclusive with positional SQL argument)")
 
 	cfg, err := config.LoadConfig()
 	if err != nil || cfg == nil {

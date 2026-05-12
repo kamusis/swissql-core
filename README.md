@@ -353,7 +353,7 @@ Stored at `~/.swissql/config.json`. Created automatically with defaults on first
 |---|---|---|---|---|
 | Backend URL | `server` | `-s, --server` | `http://localhost:8080` | SwissQL backend base URL |
 | Connect timeout | `connection_timeout_ms` | `--connection-timeout` | `5000` | Dial timeout to backend (ms) |
-| Output format | `output_format` | — | `table` | `table`, `csv`, `tsv`, `json` |
+| Output format | `output_format` | `--output-format` | `table` | `table`, `csv`, `tsv`, `json` |
 | Wide columns | `output.table.wide` | — | `false` | Disable column truncation in table output |
 | Expanded rows | `output.table.expanded` | — | `false` | Render each row vertically in table output |
 | Max col width | `output.table.max_col_width` | — | `32` | Column truncation threshold (chars) |
@@ -362,6 +362,7 @@ Stored at `~/.swissql/config.json`. Created automatically with defaults on first
 | Fetch size | `exec.fetch_size` | `--fetch-size` | `500` | JDBC fetch size hint for `exec` |
 | Query timeout | `exec.query_timeout_ms` | `--query-timeout` | `30000` | Query execution timeout for `exec` (ms) |
 | ASCII borders | — | `--plain` | `false` | Use ASCII table borders instead of Unicode |
+| SQL file | — | `-f, --file` | — | Path to a SQL file for `exec` (mutually exclusive with positional SQL argument) |
 
 `output.table.*` settings only affect rendering when `output_format` is `table`.
 
@@ -380,6 +381,30 @@ swissql connections list
 
 # override for a single command
 swissql --server http://prod:8080 connections list
+```
+
+### Example: output format
+
+Override the output format for a single invocation without editing config:
+
+```bash
+# JSON output — useful for piping to jq
+swissql exec --profile-id local-postgres --output-format json "SELECT * FROM users"
+
+# CSV output
+swissql connections list --output-format csv
+
+# TSV output
+swissql drivers list --output-format tsv
+```
+
+### Example: execute SQL from a file
+
+For complex queries with multi-line SQL, CTEs, or special characters, use `-f`:
+
+```bash
+swissql exec --profile-id local-postgres -f query.sql
+swissql exec --profile-id local-postgres -f /path/to/report.sql --output-format csv
 ```
 
 ### Legacy config migration
