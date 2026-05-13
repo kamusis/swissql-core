@@ -29,38 +29,36 @@
     </appender>
 
     <!-- ================================================================
-         File audit appender — used when SWISSQL_AUDIT_LOG_DIR is set.
-         Rolls daily; retains 90 days / 1 GB total.
-         ================================================================ -->
-    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${auditLogDir}/audit.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${auditLogDir}/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>90</maxHistory>
-            <totalSizeCap>1GB</totalSizeCap>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [AUDIT] %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <!-- ================================================================
          Audit logger.
          - additivity=false: audit entries never appear in the root logger
            (avoids double-printing when CONSOLE_AUDIT is used).
-         - When SWISSQL_AUDIT_LOG_DIR is set, write to the dedicated file.
+         - When SWISSQL_AUDIT_LOG_DIR is set, write to a dedicated rolling
+           file in that directory.
          - Otherwise, write to stdout with [AUDIT] prefix.
          ================================================================ -->
-    <logger name="com.swissql.audit" level="${auditLogLevel}" additivity="false">
-        <if condition='!property("auditLogDir").isEmpty()'>
-            <then>
+    <if condition='!property("auditLogDir").isEmpty()'>
+        <then>
+            <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+                <file>${auditLogDir}/audit.log</file>
+                <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                    <fileNamePattern>${auditLogDir}/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+                    <maxHistory>90</maxHistory>
+                    <totalSizeCap>1GB</totalSizeCap>
+                </rollingPolicy>
+                <encoder>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [AUDIT] %msg%n</pattern>
+                </encoder>
+            </appender>
+            <logger name="com.swissql.audit" level="${auditLogLevel}" additivity="false">
                 <appender-ref ref="AUDIT_FILE"/>
-            </then>
-            <else>
+            </logger>
+        </then>
+        <else>
+            <logger name="com.swissql.audit" level="${auditLogLevel}" additivity="false">
                 <appender-ref ref="CONSOLE_AUDIT"/>
-            </else>
-        </if>
-    </logger>
+            </logger>
+        </else>
+    </if>
 
     <!-- ================================================================
          Application logger and root logger.
