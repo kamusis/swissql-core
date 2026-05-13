@@ -209,33 +209,6 @@ public class DsnParser {
         }
     }
 
-    public static JdbcConnectionInfo parse(String dsn, String dbType) {
-        try {
-            ParsedDsn parsed = parseComponents(dsn, dbType);
-
-            String jdbcUrl;
-            if ("oracle".equalsIgnoreCase(parsed.getDbType())) {
-                jdbcUrl = buildOracleJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath(), parsed.getRawQuery());
-            } else if ("postgres".equalsIgnoreCase(parsed.getDbType()) || "postgresql".equalsIgnoreCase(parsed.getDbType())) {
-                jdbcUrl = buildPostgresJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath());
-            } else if ("mysql".equalsIgnoreCase(parsed.getDbType()) || "mariadb".equalsIgnoreCase(parsed.getDbType())) {
-                jdbcUrl = buildMysqlJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath());
-            } else {
-                throw new IllegalArgumentException("Unsupported database type: " + parsed.getDbType());
-            }
-
-            return JdbcConnectionInfo.builder()
-                    .url(jdbcUrl)
-                    .username(parsed.getUsername())
-                    .password(parsed.getPassword())
-                    .dbType(parsed.getDbType().toLowerCase())
-                    .build();
-
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid DSN format: " + dsn, e);
-        }
-    }
-
     /**
      * Build Oracle JDBC URL.
      *
@@ -263,7 +236,8 @@ public class DsnParser {
         } else {
             // Priority 3: Standard Service Mode
             if (port <= 0) port = 1521;
-            return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, path);
+            String db = (path != null && !path.isEmpty()) ? "/" + path : "";
+            return String.format("jdbc:oracle:thin:@//%s:%d%s", host, port, db);
         }
     }
 
@@ -272,12 +246,13 @@ public class DsnParser {
      *
      * @param host host
      * @param port port
-     * @param path path
+     * @param path path (database name, may be null or empty)
      * @return jdbc url
      */
     public static String buildPostgresJdbcUrl(String host, int port, String path) {
         if (port <= 0) port = 5432;
-        return String.format("jdbc:postgresql://%s:%d/%s", host, port, path);
+        String db = (path != null && !path.isEmpty()) ? "/" + path : "";
+        return String.format("jdbc:postgresql://%s:%d%s", host, port, db);
     }
 
     /**
@@ -285,12 +260,13 @@ public class DsnParser {
      *
      * @param host host
      * @param port port
-     * @param path path (database name)
+     * @param path path (database name, may be null or empty)
      * @return jdbc url
      */
     public static String buildMysqlJdbcUrl(String host, int port, String path) {
         if (port <= 0) port = 3306;
-        return String.format("jdbc:mysql://%s:%d/%s", host, port, path);
+        String db = (path != null && !path.isEmpty()) ? "/" + path : "";
+        return String.format("jdbc:mysql://%s:%d%s", host, port, db);
     }
 
     public static Map<String, String> parseQuery(String query) {
