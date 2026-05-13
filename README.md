@@ -330,6 +330,24 @@ export SPRING_PROFILES_ACTIVE=local
 mvn -f swissql-backend/pom.xml test
 ```
 
+## CLI Setup for AI Agents
+
+The `swissql setup` command detects installed AI coding agents and injects the SwissQL CLI usage guide into their global prompt files so agents know how to use SwissQL out of the box.
+
+```bash
+swissql setup
+```
+
+Supported agents:
+
+| Agent | Prompt File |
+|-------|-------------|
+| Claude Code | `~/.claude/CLAUDE.md` |
+| Codex | `~/.codex/AGENTS.md` |
+| Kimi Code | `~/.kimi/AGENTS.md` |
+
+The command is idempotent — re-running it updates the existing guide block rather than duplicating it.
+
 ## CLI Configuration
 
 The CLI (`swissql`) is a thin client that calls the backend REST API. Its behaviour is controlled by three layers, applied in order of increasing precedence:
