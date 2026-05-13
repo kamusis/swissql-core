@@ -37,7 +37,7 @@ public class JdbcDriverAutoLoader {
 
     private static final String DEFAULT_DIR = "/jdbc_drivers";
 
-    private static final Set<String> BUILTIN_DB_TYPES = Set.of("oracle", "postgres");
+    private static final Set<String> BUILTIN_DB_TYPES = Set.of("oracle", "postgres", "mysql");
 
     private final Environment environment;
     private final ObjectMapper objectMapper;
@@ -63,10 +63,15 @@ public class JdbcDriverAutoLoader {
     public void init() {
         driverRegistry.registerBuiltin("oracle", "oracle.jdbc.OracleDriver");
         driverRegistry.registerBuiltin("postgres", "org.postgresql.Driver");
+        driverRegistry.registerBuiltin("mysql", "com.mysql.cj.jdbc.Driver");
 
         driverRegistry.find("postgres").ifPresent(postgresEntry -> {
             driverRegistry.upsertAlias("postgresql", postgresEntry);
             driverRegistry.upsertAlias("pg", postgresEntry);
+        });
+
+        driverRegistry.find("mysql").ifPresent(mysqlEntry -> {
+            driverRegistry.upsertAlias("mariadb", mysqlEntry);
         });
 
         boolean enabled = getBool("swissql.jdbc-drivers.auto-load.enabled", "SWISSQL_JDBC_DRIVERS_AUTO_LOAD_ENABLED", true);

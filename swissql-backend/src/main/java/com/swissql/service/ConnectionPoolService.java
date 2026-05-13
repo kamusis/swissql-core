@@ -103,6 +103,8 @@ public class ConnectionPoolService {
         } else if ("postgres".equalsIgnoreCase(info.getDbType())) {
             config.setDriverClassName("org.postgresql.Driver");
             config.addDataSourceProperty("ApplicationName", "swissql");
+        } else if ("mysql".equalsIgnoreCase(info.getDbType())) {
+            config.setDriverClassName("com.mysql.cj.jdbc.Driver");
         }
         config.setConnectionTimeout(getLong("swissql.pool.connection-timeout-ms", DEFAULT_CONNECTION_TIMEOUT_MS));
         config.setMaximumPoolSize(getInt("swissql.pool.max-size", DEFAULT_MAX_POOL_SIZE));

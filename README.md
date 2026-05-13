@@ -231,7 +231,7 @@ All configuration is done via environment variables. Spring properties (e.g. in 
 
 ## Dynamic JDBC Drivers
 
-Built-in drivers: **Oracle** (ojdbc11), **PostgreSQL**.
+Built-in drivers: **Oracle** (ojdbc11), **PostgreSQL**, **MySQL** (Connector/J).
 
 To add more drivers, place a `driver.json` manifest and the JDBC JAR in a subdirectory under the configured driver directory:
 

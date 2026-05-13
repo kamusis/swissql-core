@@ -218,6 +218,8 @@ public class DsnParser {
                 jdbcUrl = buildOracleJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath(), parsed.getRawQuery());
             } else if ("postgres".equalsIgnoreCase(parsed.getDbType()) || "postgresql".equalsIgnoreCase(parsed.getDbType())) {
                 jdbcUrl = buildPostgresJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath());
+            } else if ("mysql".equalsIgnoreCase(parsed.getDbType()) || "mariadb".equalsIgnoreCase(parsed.getDbType())) {
+                jdbcUrl = buildMysqlJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath());
             } else {
                 throw new IllegalArgumentException("Unsupported database type: " + parsed.getDbType());
             }
@@ -247,20 +249,20 @@ public class DsnParser {
         Map<String, String> queryParams = parseQuery(query);
         String sid = queryParams.get("sid");
 
-        // NOTE: We don't append queryString to the JDBC URL here because 
+        // NOTE: We don't append queryString to the JDBC URL here because
         // we're passing parameters (like TNS_ADMIN) as properties to the DataSource.
         // Appending them with '?' can cause 'Invalid connection string format' in the thin driver.
 
         if (sid != null && !sid.isEmpty()) {
             // Priority 1: SID Mode
-            if (port == -1) port = 1521;
+            if (port <= 0) port = 1521;
             return String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, sid);
-        } else if (port == -1 && (path == null || path.isEmpty())) {
+        } else if (port <= 0 && (path == null || path.isEmpty())) {
             // Priority 2: TNS Alias Mode
             return String.format("jdbc:oracle:thin:@%s", host);
         } else {
             // Priority 3: Standard Service Mode
-            if (port == -1) port = 1521;
+            if (port <= 0) port = 1521;
             return String.format("jdbc:oracle:thin:@//%s:%d/%s", host, port, path);
         }
     }
@@ -274,8 +276,21 @@ public class DsnParser {
      * @return jdbc url
      */
     public static String buildPostgresJdbcUrl(String host, int port, String path) {
-        if (port == -1) port = 5432;
+        if (port <= 0) port = 5432;
         return String.format("jdbc:postgresql://%s:%d/%s", host, port, path);
+    }
+
+    /**
+     * Build MySQL JDBC URL.
+     *
+     * @param host host
+     * @param port port
+     * @param path path (database name)
+     * @return jdbc url
+     */
+    public static String buildMysqlJdbcUrl(String host, int port, String path) {
+        if (port <= 0) port = 3306;
+        return String.format("jdbc:mysql://%s:%d/%s", host, port, path);
     }
 
     public static Map<String, String> parseQuery(String query) {

@@ -21,7 +21,7 @@ class DriverServiceTest {
         DriversResponse response = service.listDrivers();
 
         assertThat(response.getDrivers()).extracting(DriversResponse.DriverEntry::getDbType)
-                .contains("oracle", "postgres");
+                .contains("oracle", "postgres", "mysql");
         DriversResponse.DriverEntry postgres = response.getDrivers().stream()
                 .filter(driver -> "postgres".equals(driver.getDbType()))
                 .findFirst()
@@ -30,6 +30,7 @@ class DriverServiceTest {
         assertThat(postgres.getDriverClass()).isEqualTo("org.postgresql.Driver");
         assertThat(registry.find("pg")).isPresent();
         assertThat(registry.find("postgresql")).isPresent();
+        assertThat(registry.find("mariadb")).isPresent();
     }
 
     @Test
