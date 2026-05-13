@@ -44,6 +44,22 @@ docker run -d --rm --name swissql-core \
   ghcr.io/kamusis/swissql-core
 ```
 
+To persist audit logs to a dedicated directory:
+
+```bash
+docker run -d --rm --name swissql-core \
+  -p 8080:8080 \
+  -e SWISSQL_DATA_DIR=/app/data \
+  -e SWISSQL_AUDIT_LOG_DIR=/app/audit \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/audit:/app/audit \
+  ghcr.io/kamusis/swissql-core
+```
+
+When `SWISSQL_AUDIT_LOG_DIR` is not set, audit entries are written to stdout
+with an `[AUDIT]` prefix alongside the application log. Set
+`SWISSQL_AUDIT_LOG_LEVEL=OFF` to disable audit logging entirely.
+
 **Verify it's running:**
 
 ```bash
@@ -202,6 +218,8 @@ All configuration is done via environment variables. Spring properties (e.g. in 
 |---|---|---|
 | `SWISSQL_SERVER_PORT` | `8080` | HTTP listening port |
 | `SWISSQL_LOG_LEVEL` | `INFO` | Log level for `com.swissql` (`DEBUG`, `INFO`, `WARN`, `ERROR`) |
+| `SWISSQL_AUDIT_LOG_LEVEL` | `INFO` | Audit log level. Set to `OFF` to disable SQL audit logging entirely |
+| `SWISSQL_AUDIT_LOG_DIR` | _(empty)_ | When set, audit entries are written to a rolling file `audit.log` in this directory. When unset, audit entries go to stdout with an `[AUDIT]` prefix |
 | `SWISSQL_DATA_DIR` | `./data` | Directory for `connections.json` and `credentials.json` |
 | `SWISSQL_POOL_MAX_SIZE` | `5` | HikariCP max pool size per connection profile |
 | `SWISSQL_POOL_MIN_IDLE` | `1` | HikariCP min idle connections per connection profile |

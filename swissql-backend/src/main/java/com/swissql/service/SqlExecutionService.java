@@ -4,6 +4,9 @@ import com.swissql.api.ExecuteResponse;
 import com.swissql.api.SqlExecuteRequest;
 import com.swissql.model.ConnectionProfile;
 import com.swissql.util.JdbcJsonSafe;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +23,8 @@ import java.util.Map;
 
 @Service
 public class SqlExecutionService {
+    private static final Logger auditLog = LoggerFactory.getLogger("com.swissql.audit");
+
     private final ConnectionProfileService profileService;
     private final ConnectionPoolService poolService;
 
@@ -29,7 +34,16 @@ public class SqlExecutionService {
     }
 
     public ExecuteResponse execute(SqlExecuteRequest request) {
-        SqlSafetyValidator.validate(request.getSql(), request.isAllowWrite());
+        // Safety check fires before profile resolution — audit as "blocked" if rejected.
+        try {
+            SqlSafetyValidator.validate(request.getSql(), request.isAllowWrite());
+        } catch (CoreApiException e) {
+            auditLog.warn("profile_id={} db_type=unknown allow_write={} outcome=blocked duration_ms=0 trace_id={} sql={}",
+                    request.getProfileId(), request.isAllowWrite(),
+                    MDC.get("trace_id"), request.getSql());
+            throw e;
+        }
+
         ConnectionProfile profile = profileService.getRequired(request.getProfileId());
         if (!profile.isEnabled()) {
             throw new CoreApiException("CONNECTION_DISABLED", HttpStatus.BAD_REQUEST, "Connection profile is disabled");
@@ -60,12 +74,26 @@ public class SqlExecutionService {
                 response.setData(data);
             }
             response.setMetadata(metadata);
+
+            auditLog.info("profile_id={} db_type={} allow_write={} outcome=success duration_ms={} rows={} rows_affected={} truncated={} trace_id={} sql={}",
+                    profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    duration, metadata.getRowsReturned(), metadata.getRowsAffected(),
+                    metadata.isTruncated(), MDC.get("trace_id"), request.getSql());
+
             return response;
         } catch (SQLTimeoutException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            auditLog.warn("profile_id={} db_type={} allow_write={} outcome=timeout duration_ms={} error={} trace_id={} sql={}",
+                    profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
             throw new CoreApiException("SQL_TIMEOUT", HttpStatus.REQUEST_TIMEOUT, "SQL execution timed out", e.getMessage());
         } catch (CoreApiException e) {
             throw e;
         } catch (SQLException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            auditLog.warn("profile_id={} db_type={} allow_write={} outcome=error duration_ms={} error={} trace_id={} sql={}",
+                    profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
             throw new CoreApiException("SQL_EXECUTION_ERROR", HttpStatus.BAD_REQUEST, "SQL execution failed", e.getMessage());
         }
     }

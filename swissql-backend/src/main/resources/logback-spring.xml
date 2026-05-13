@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ================================================================
+         Read environment variables into logback properties.
+         ================================================================ -->
+    <springProperty name="swissqlLogLevel"      source="logging.level.com.swissql"       defaultValue="INFO"/>
+    <springProperty name="auditLogLevel"         source="logging.level.com.swissql.audit"  defaultValue="INFO"/>
+    <springProperty name="auditLogDir"           source="swissql.audit-log-dir"            defaultValue=""/>
+
+    <!-- ================================================================
+         Console appender — application logs with trace_id from MDC.
+         ================================================================ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [%X{trace_id:-}] [%thread] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ================================================================
+         Console audit appender — used when SWISSQL_AUDIT_LOG_DIR is NOT
+         set. Audit entries go to stdout with an [AUDIT] prefix so they
+         can be distinguished from regular application log lines.
+         ================================================================ -->
+    <appender name="CONSOLE_AUDIT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [AUDIT] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ================================================================
+         File audit appender — used when SWISSQL_AUDIT_LOG_DIR is set.
+         Rolls daily; retains 90 days / 1 GB total.
+         ================================================================ -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${auditLogDir}/audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${auditLogDir}/audit.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>90</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5level [AUDIT] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ================================================================
+         Audit logger.
+         - additivity=false: audit entries never appear in the root logger
+           (avoids double-printing when CONSOLE_AUDIT is used).
+         - When SWISSQL_AUDIT_LOG_DIR is set, write to the dedicated file.
+         - Otherwise, write to stdout with [AUDIT] prefix.
+         ================================================================ -->
+    <logger name="com.swissql.audit" level="${auditLogLevel}" additivity="false">
+        <if condition='!property("auditLogDir").isEmpty()'>
+            <then>
+                <appender-ref ref="AUDIT_FILE"/>
+            </then>
+            <else>
+                <appender-ref ref="CONSOLE_AUDIT"/>
+            </else>
+        </if>
+    </logger>
+
+    <!-- ================================================================
+         Application logger and root logger.
+         ================================================================ -->
+    <logger name="com.swissql" level="${swissqlLogLevel}"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>
