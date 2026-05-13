@@ -58,6 +58,16 @@ public class JdbcConnectionInfoResolver {
                     .build();
         }
 
+        if ("mysql".equalsIgnoreCase(normalizedDbType) || "mariadb".equalsIgnoreCase(normalizedDbType)) {
+            String jdbcUrl = DsnParser.buildMysqlJdbcUrl(parsed.getHost(), parsed.getPort(), parsed.getPath());
+            return JdbcConnectionInfo.builder()
+                    .url(jdbcUrl)
+                    .username(parsed.getUsername())
+                    .password(parsed.getPassword())
+                    .dbType("mysql")
+                    .build();
+        }
+
         DriverRegistry.Entry entry = driverRegistry.find(normalizedDbType)
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported database type: " + normalizedDbType));
 
