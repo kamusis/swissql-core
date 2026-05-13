@@ -7,8 +7,8 @@ description: SwissQL Core git release workflow that detects current tags and rec
 ### Prerequisites
 
 - This workflow assumes the tag convention:
-  - `cli-vX.Y.Z` — triggers `release-cli.yml` workflow
-  - `backend-vX.Y.Z` — triggers `release-backend-image.yml` workflow
+  - `cli-vX.Y.Z` — triggers `release-cli.yml` workflow (creates GitHub Release with cross-platform binaries)
+  - `backend-vX.Y.Z` — triggers `release-backend-image.yml` workflow (creates GitHub Release referencing the Docker image)
 - Run commands in **Git Bash** or any POSIX shell.
 - This workflow does not execute tagging/pushing automatically. It produces **copy-paste** commands for you to run after review.
 
