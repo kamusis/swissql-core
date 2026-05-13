@@ -7,8 +7,8 @@ description: SwissQL Core git release workflow that detects current tags and rec
 ### Prerequisites
 
 - This workflow assumes the tag convention:
-  - `cli/vX.Y.Z` — triggers `release-cli.yml` workflow
-  - `backend/vX.Y.Z` — triggers `release-backend-image.yml` workflow
+  - `cli-vX.Y.Z` — triggers `release-cli.yml` workflow
+  - `backend-vX.Y.Z` — triggers `release-backend-image.yml` workflow
 - Run commands in **Git Bash** or any POSIX shell.
 - This workflow does not execute tagging/pushing automatically. It produces **copy-paste** commands for you to run after review.
 
@@ -22,14 +22,14 @@ git log --oneline -10
 ### 2. Identify latest tags
 
 // turbo
-git tag -l | grep -E "^(cli|backend)/v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -10
+git tag -l | grep -E "^(cli|backend)-v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -10
 
 ### 3. Recommend next version + tag commands
 
 Run the script below and copy-paste the printed commands.
 
 Rules:
-- Tag discovery ignores malformed tags (only `cli/v<semver>` and `backend/v<semver>` are considered).
+- Tag discovery ignores malformed tags (only `cli-v<semver>` and `backend-v<semver>` are considered).
 - Commit scanning is component-scoped: CLI bump uses commits touching `swissql-cli/`, backend bump uses commits touching `swissql-backend/`.
 - New repo fallback: if no component tags exist, scans the last 50 commits.
 
@@ -37,7 +37,7 @@ Rules:
 set -euo pipefail
 
 latest_semver_from_tag() {
-  echo "$1" | sed -E 's@^[^/]*/v@@'
+  echo "$1" | sed -E 's@^[^-]*-v@@'
 }
 
 semver_bump() {
@@ -57,8 +57,8 @@ semver_bump() {
   echo "${major}.${minor}.${patch}"
 }
 
-latest_cli_tag=$(git tag -l | grep -E '^cli/v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-latest_backend_tag=$(git tag -l | grep -E '^backend/v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+latest_cli_tag=$(git tag -l | grep -E '^cli-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+latest_backend_tag=$(git tag -l | grep -E '^backend-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
 
 echo "LATEST_CLI_TAG=${latest_cli_tag}"
 echo "LATEST_BACKEND_TAG=${latest_backend_tag}"
@@ -129,9 +129,9 @@ backend_message="Backend: ${backend_message}."
 
 echo ""
 echo "--- COPY-PASTE COMMANDS ---"
-echo "git tag -a cli/v${next_version} -m \"${cli_message}\""
-echo "git tag -a backend/v${next_version} -m \"${backend_message}\""
-echo "git push origin cli/v${next_version} backend/v${next_version}"
+echo "git tag -a cli-v${next_version} -m \"${cli_message}\""
+echo "git tag -a backend-v${next_version} -m \"${backend_message}\""
+echo "git push origin cli-v${next_version} backend-v${next_version}"
 ```
 
 ### 4. Final verification
@@ -139,9 +139,9 @@ echo "git push origin cli/v${next_version} backend/v${next_version}"
 After running the tag/push commands:
 
 ```bash
-git tag -l | grep -E "^(cli|backend)/vX\.Y\.Z$"
-git show cli/vX.Y.Z --quiet
-git show backend/vX.Y.Z --quiet
+git tag -l | grep -E "^(cli|backend)-vX\.Y\.Z$"
+git show cli-vX.Y.Z --quiet
+git show backend-vX.Y.Z --quiet
 ```
 
 ## Version determination guidelines

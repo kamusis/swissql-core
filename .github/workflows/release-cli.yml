@@ -9,7 +9,7 @@ on:
         type: string
   push:
     tags:
-      - "cli/v*"
+      - "cli-v*"
 
 permissions:
   contents: write
@@ -33,7 +33,7 @@ jobs:
             VERSION="${{ inputs.version }}"
           else
             TAG="${GITHUB_REF_NAME}"
-            VERSION="${TAG#cli/v}"
+            VERSION="${TAG#cli-v}"
           fi
 
           if [[ -z "${VERSION}" ]]; then
@@ -42,7 +42,7 @@ jobs:
           fi
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=cli/v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=cli-v${VERSION}" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build binaries

@@ -9,7 +9,7 @@ name: Release Backend Docker Image
         type: string
   push:
     tags:
-      - "backend/v*"
+      - "backend-v*"
 
 permissions:
   contents: read
@@ -47,7 +47,7 @@ jobs:
             VERSION="${{ inputs.version }}"
           else
             TAG="${GITHUB_REF_NAME}"
-            VERSION="${TAG#backend/v}"
+            VERSION="${TAG#backend-v}"
           fi
 
           if [[ -z "${VERSION}" ]]; then
