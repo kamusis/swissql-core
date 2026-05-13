@@ -88,6 +88,10 @@ public class SqlExecutionService {
                     duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
             throw new CoreApiException("SQL_TIMEOUT", HttpStatus.REQUEST_TIMEOUT, "SQL execution timed out", e.getMessage());
         } catch (CoreApiException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            auditLog.warn("profile_id={} db_type={} allow_write={} outcome=error duration_ms={} error={} trace_id={} sql={}",
+                    profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
             throw e;
         } catch (SQLException e) {
             long duration = System.currentTimeMillis() - startTime;
