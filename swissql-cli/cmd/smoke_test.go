@@ -52,6 +52,56 @@ func TestCLI_SubcommandHelpSmoke(t *testing.T) {
 				"list",
 				"add",
 				"test",
+				"get",
+				"update",
+				"delete",
+				"test-draft",
+				"import",
+			},
+		},
+		{
+			name: "connections_list_help",
+			args: []string{"connections", "list", "--help"},
+			wantSubstrs: []string{
+				"db-type",
+				"enabled",
+				"name-contains",
+				"label",
+			},
+		},
+		{
+			name: "connections_update_help",
+			args: []string{"connections", "update", "--help"},
+			wantSubstrs: []string{
+				"name",
+				"dsn",
+				"enabled",
+				"password",
+			},
+		},
+		{
+			name: "connections_test_draft_help",
+			args: []string{"connections", "test-draft", "--help"},
+			wantSubstrs: []string{
+				"db-type",
+				"dsn",
+				"password",
+			},
+		},
+		{
+			name: "connections_import_help",
+			args: []string{"connections", "import", "--help"},
+			wantSubstrs: []string{
+				"dbeaver",
+			},
+		},
+		{
+			name: "connections_import_dbeaver_help",
+			args: []string{"connections", "import", "dbeaver", "--help"},
+			wantSubstrs: []string{
+				"dry-run",
+				"on-conflict",
+				"name-prefix",
 			},
 		},
 		{
@@ -69,6 +119,20 @@ func TestCLI_SubcommandHelpSmoke(t *testing.T) {
 			wantSubstrs: []string{
 				"exec",
 				"profile-id",
+			},
+		},
+		{
+			name: "status_help",
+			args: []string{"status", "--help"},
+			wantSubstrs: []string{
+				"status",
+			},
+		},
+		{
+			name: "capabilities_help",
+			args: []string{"capabilities", "--help"},
+			wantSubstrs: []string{
+				"capabilities",
 			},
 		},
 	}

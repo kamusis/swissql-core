@@ -11,23 +11,57 @@ SwissQL Core is a backend-first REST service for database connection management 
 | `--plain` | `false` | Use ASCII instead of Unicode box-drawing |
 | `--output-format` | `table` | Output format: `table`, `csv`, `tsv`, or `json` |
 
+## Status and Capabilities
+
+```bash
+# Backend health check
+swissql status
+
+# Loaded drivers and feature flags
+swissql capabilities
+```
+
 ## Connection Profiles
 
-### List All Connections
+### List Connections
 
-List all configured connection profiles.
+List all configured connection profiles. Supports server-side filtering.
 
 ```bash
 swissql connections list
 ```
 
-Filter by labels:
+Filter examples:
 
 ```bash
+swissql connections list --db-type postgres
+swissql connections list --enabled=true
+swissql connections list --name-contains primary
+swissql connections list --db-type postgres --enabled=true --name-contains primary
+swissql connections list --label cluster:pg-prod
 swissql connections list --label cluster:pg-prod --label role:primary
 ```
 
-Output columns: `profile_id`, `name`, `db_type`, `dsn_masked`, `username`, `credential_configured`, `credential_source`, `enabled`, `labels`.
+Filter flags:
+
+| Flag | Description |
+|------|-------------|
+| `--db-type <type>` | Exact match on `db_type` (case-insensitive) |
+| `--enabled` | Filter by enabled state (`--enabled=true` or `--enabled=false`) |
+| `--name-contains <str>` | Case-insensitive substring match on `name` |
+| `--label <key:value>` | Match profiles with this label (repeatable, ANDed) |
+
+Output columns: `profile_id`, `name`, `db_type`, `dsn_masked`, `username`, `credential_configured`, `credential_source`, `enabled`.
+
+### Get a Connection
+
+Fetch full details for a single profile by ID.
+
+```bash
+swissql connections get <profile-id>
+```
+
+Returns JSON including `source`, `labels`, `created_at`, `updated_at`.
 
 ### Add a Connection
 
@@ -48,7 +82,42 @@ swissql connections add \
 
 Required: `--name`, `--db-type`, `--dsn`.
 
-Labels are optional key/value metadata attached to the profile. Use `--label key=value` (repeatable).
+Labels are optional key/value metadata. Use `--label key=value` (repeatable). Note: `--label` on `add` uses `=` separator; on `list` it uses `:` separator.
+
+### Update a Connection
+
+Partially update an existing profile. Only flags that are explicitly provided are sent in the request — unset flags are not touched.
+
+```bash
+swissql connections update <profile-id> [flags]
+```
+
+Examples:
+
+```bash
+swissql connections update pg-primary --name "PG Primary v2" --enabled=true
+swissql connections update pg-primary --dsn postgres://newhost:5432/mydb --password newpass
+swissql connections update pg-primary --credential-ref env:PROD_PG_PASSWORD
+```
+
+Flags:
+
+| Flag | Description |
+|------|-------------|
+| `--name` | New display name |
+| `--db-type` | New database type |
+| `--dsn` | New DSN |
+| `--username` | New username |
+| `--password` | New password |
+| `--save-password` | Persist the new password in backend storage |
+| `--credential-ref` | New credential reference (e.g. `env:MY_VAR`) |
+| `--enabled` | Enable or disable the profile |
+
+### Delete a Connection
+
+```bash
+swissql connections delete <profile-id>
+```
 
 ### Test a Connection
 
@@ -59,6 +128,56 @@ swissql connections test <profile-id>
 ```
 
 Returns JSON: `ok`, `duration_ms`, `message`.
+
+### Test a Draft Connection
+
+Test a connection without creating a profile. Useful for validating credentials before committing.
+
+```bash
+swissql connections test-draft \
+  --db-type postgres \
+  --dsn postgres://localhost:5432/mydb \
+  --password secret
+```
+
+Required: `--db-type`, `--dsn`.
+
+| Flag | Description |
+|------|-------------|
+| `--db-type` | Database type (required) |
+| `--dsn` | DSN to test (required) |
+| `--username` | Database username |
+| `--password` | Database password |
+| `--credential-ref` | Credential reference (e.g. `env:MY_VAR`) |
+
+### Import from DBeaver
+
+Import connection profiles from a DBeaver `.dbp` project archive.
+
+```bash
+swissql connections import dbeaver <file>
+```
+
+Examples:
+
+```bash
+# Basic import
+swissql connections import dbeaver connections.dbp
+
+# Dry run — validate without persisting
+swissql connections import dbeaver connections.dbp --dry-run
+
+# Skip conflicts, add a name prefix
+swissql connections import dbeaver connections.dbp \
+  --on-conflict skip \
+  --name-prefix "imported-"
+```
+
+| Flag | Values | Default | Description |
+|------|--------|---------|-------------|
+| `--dry-run` | — | `false` | Simulate import without persisting |
+| `--on-conflict` | `fail\|skip\|overwrite` | `fail` | Conflict resolution strategy |
+| `--name-prefix` | string | — | Prefix prepended to imported profile names |
 
 ## Labels
 
@@ -145,7 +264,7 @@ swissql drivers list
 
 ### Reload Drivers
 
-Rescan the driver directory and reload drivers.
+Rescan the driver directory and reload drivers without restarting the backend.
 
 ```bash
 swissql drivers reload
