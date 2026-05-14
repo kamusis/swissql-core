@@ -77,7 +77,7 @@ public class ConnectionProfileService {
         for (String filter : labelFilters) {
             int idx = filter.indexOf(':');
             if (idx <= 0) {
-                continue; // skip malformed label filters
+                return false; // malformed filter matches nothing
             }
             String key = filter.substring(0, idx);
             String value = filter.substring(idx + 1);

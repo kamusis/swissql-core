@@ -392,6 +392,31 @@ class ConnectionProfileServiceTest {
         assertThat(result).hasSize(2);
     }
 
+    @Test
+    void listWithMalformedLabelFilterMatchesNothing() {
+        Harness harness = harness();
+        ConnectionCreateRequest req = createRequest("pg-1");
+        req.setLabels(Map.of("cluster", "pg-prod"));
+        harness.service.create(req);
+
+        // No colon separator — malformed filter should match nothing, not everything
+        List<ConnectionProfile> result = harness.service.list(null, null, null, List.of("cluster_pg-prod"));
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void listWithAllMalformedLabelFiltersMatchesNothing() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+        harness.service.create(createRequest("pg-2"));
+
+        // All filters malformed — should return empty, not all profiles
+        List<ConnectionProfile> result = harness.service.list(null, null, null, List.of("badformat", "alsoBad=value"));
+
+        assertThat(result).isEmpty();
+    }
+
     private ConnectionCreateRequest createRequest(String profileId) {
         ConnectionCreateRequest request = new ConnectionCreateRequest();
         request.setProfileId(profileId);
