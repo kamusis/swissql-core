@@ -4,6 +4,7 @@ import com.swissql.model.ConnectionProfile;
 import lombok.Data;
 
 import java.time.OffsetDateTime;
+import java.util.Map;
 
 @Data
 public class ConnectionResponse {
@@ -16,6 +17,7 @@ public class ConnectionResponse {
     private String credentialSource;
     private boolean enabled;
     private ConnectionProfile.ProfileSource source;
+    private Map<String, String> labels;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     private String traceId;

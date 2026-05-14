@@ -4,6 +4,8 @@ import com.swissql.model.ConnectionProfile;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.util.Map;
+
 @Data
 public class ConnectionCreateRequest {
     private String profileId;
@@ -21,4 +23,5 @@ public class ConnectionCreateRequest {
     private String credentialRef;
     private Boolean enabled;
     private ConnectionProfile.ProfileSource source;
+    private Map<String, String> labels;
 }

@@ -96,24 +96,26 @@ type ConnectionsListResponse struct {
 }
 
 type ConnectionProfileResponse struct {
-	ProfileId            string `json:"profile_id"`
-	Name                 string `json:"name"`
-	DbType               string `json:"db_type"`
-	DsnMasked            string `json:"dsn_masked"`
-	Username             string `json:"username"`
-	CredentialConfigured bool   `json:"credential_configured"`
-	CredentialSource     string `json:"credential_source"`
-	Enabled              bool   `json:"enabled"`
+	ProfileId            string            `json:"profile_id"`
+	Name                 string            `json:"name"`
+	DbType               string            `json:"db_type"`
+	DsnMasked            string            `json:"dsn_masked"`
+	Username             string            `json:"username"`
+	CredentialConfigured bool              `json:"credential_configured"`
+	CredentialSource     string            `json:"credential_source"`
+	Enabled              bool              `json:"enabled"`
+	Labels               map[string]string `json:"labels,omitempty"`
 }
 
 type ConnectionCreateRequest struct {
-	ProfileId    string `json:"profile_id,omitempty"`
-	Name         string `json:"name"`
-	DbType       string `json:"db_type"`
-	Dsn          string `json:"dsn"`
-	Username     string `json:"username,omitempty"`
-	Password     string `json:"password,omitempty"`
-	SavePassword *bool  `json:"save_password,omitempty"`
+	ProfileId    string            `json:"profile_id,omitempty"`
+	Name         string            `json:"name"`
+	DbType       string            `json:"db_type"`
+	Dsn          string            `json:"dsn"`
+	Username     string            `json:"username,omitempty"`
+	Password     string            `json:"password,omitempty"`
+	SavePassword *bool             `json:"save_password,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 type ConnectionTestResponse struct {

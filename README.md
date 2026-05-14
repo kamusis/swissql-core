@@ -78,7 +78,11 @@ curl -X POST http://localhost:8080/v1/connections \
     "dsn": "postgres://localhost:5432/postgres",
     "username": "postgres",
     "password": "postgres",
-    "save_password": true
+    "save_password": true,
+    "labels": {
+      "env": "local",
+      "team": "platform"
+    }
   }'
 ```
 
@@ -114,6 +118,68 @@ curl -X POST http://localhost:8080/v1/sql/execute \
 | `POST` | `/v1/connections/test` | Test a draft connection (no profile required) |
 | `POST` | `/v1/connections/{profile_id}/test` | Test an existing profile |
 | `POST` | `/v1/connections/import/dbeaver` | Import profiles from a DBeaver `.dbp` archive |
+
+### Connection Profile Labels
+
+Profiles support an optional `labels` field — a flat `string → string` map for attaching arbitrary metadata such as environment, team, cluster membership, or role. Labels follow the same design philosophy as Kubernetes labels: open-ended keys with user-defined semantics.
+
+**Validation rules:**
+
+| Constraint | Rule |
+|---|---|
+| Key format | `[a-z0-9][a-z0-9._\-/]{0,62}` |
+| Value max length | 256 characters |
+| Max labels per profile | 64 |
+| Null map | treated as empty (no labels) |
+
+**Create a profile with labels:**
+
+```bash
+curl -X POST http://localhost:8080/v1/connections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "profile_id": "pg-primary",
+    "db_type": "postgres",
+    "dsn": "postgres://primary-host:5432/mydb",
+    "labels": {
+      "cluster": "pg-prod",
+      "role": "primary",
+      "env": "production"
+    }
+  }'
+```
+
+**Update labels on an existing profile** (`PATCH`):
+
+- A `null` `labels` value means "do not change labels".
+- An explicit empty object `{}` clears all labels.
+
+```bash
+# Replace labels
+curl -X PATCH http://localhost:8080/v1/connections/pg-primary \
+  -H "Content-Type: application/json" \
+  -d '{"labels": {"env": "staging"}}'
+
+# Clear all labels
+curl -X PATCH http://localhost:8080/v1/connections/pg-primary \
+  -H "Content-Type: application/json" \
+  -d '{"labels": {}}'
+```
+
+**CLI — add a profile with labels:**
+
+```bash
+swissql connections add \
+  --profile-id pg-primary \
+  --name pg-primary \
+  --db-type postgres \
+  --dsn postgres://primary-host:5432/mydb \
+  --label cluster=pg-prod \
+  --label role=primary \
+  --label env=production
+```
+
+The `--label` flag is repeatable. Each value must be in `key=value` format.
 
 ### SQL Execution
 

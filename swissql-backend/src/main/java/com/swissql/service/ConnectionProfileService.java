@@ -16,8 +16,10 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 @Service
@@ -59,6 +61,7 @@ public class ConnectionProfileService {
         }
 
         validatePasswordStorage(request.getPassword(), request.getSavePassword());
+        LabelValidator.validate(request.getLabels());
         ProfileDsn.Normalized normalizedDsn = ProfileDsn.normalize(request.getDsn(), request.getUsername());
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -71,6 +74,7 @@ public class ConnectionProfileService {
         profile.setCredentialRef(clean(request.getCredentialRef()));
         profile.setEnabled(request.getEnabled() == null || request.getEnabled());
         profile.setSource(sourceOrManual(request.getSource()));
+        profile.setLabels(request.getLabels() != null ? new LinkedHashMap<>(request.getLabels()) : new LinkedHashMap<>());
         profile.setCreatedAt(now);
         profile.setUpdatedAt(now);
 
@@ -109,6 +113,10 @@ public class ConnectionProfileService {
         if (request.getSource() != null) {
             updated.setSource(sourceOrManual(request.getSource()));
         }
+        if (request.getLabels() != null) {
+            LabelValidator.validate(request.getLabels());
+            updated.setLabels(new LinkedHashMap<>(request.getLabels()));
+        }
 
         validatePasswordStorage(request.getPassword(), request.getSavePassword());
         boolean credentialChanged = false;
@@ -139,6 +147,7 @@ public class ConnectionProfileService {
         response.setCredentialSource(credentialResolver.credentialSource(profile));
         response.setEnabled(profile.isEnabled());
         response.setSource(profile.getSource());
+        response.setLabels(profile.getLabels() != null ? new LinkedHashMap<>(profile.getLabels()) : new LinkedHashMap<>());
         response.setCreatedAt(profile.getCreatedAt());
         response.setUpdatedAt(profile.getUpdatedAt());
         response.setTraceId(MDC.get("trace_id"));
@@ -193,6 +202,7 @@ public class ConnectionProfileService {
         copy.setCredentialRef(profile.getCredentialRef());
         copy.setEnabled(profile.isEnabled());
         copy.setSource(profile.getSource());
+        copy.setLabels(profile.getLabels() != null ? new LinkedHashMap<>(profile.getLabels()) : new LinkedHashMap<>());
         copy.setCreatedAt(profile.getCreatedAt());
         copy.setUpdatedAt(profile.getUpdatedAt());
         return copy;

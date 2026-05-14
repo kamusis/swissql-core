@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -115,6 +117,124 @@ class ConnectionProfileServiceTest {
         assertThat(harness.service.delete("local-pg")).isTrue();
         assertThat(harness.store.get("local-pg")).isEmpty();
         assertThat(harness.credentialStore.get("local-pg")).isEmpty();
+    }
+
+    @Test
+    void createsProfileWithLabels() {
+        Harness harness = harness();
+        ConnectionCreateRequest request = createRequest("labeled-pg");
+        request.setLabels(Map.of("env", "production", "cluster", "pg-prod", "role", "primary"));
+
+        ConnectionProfile profile = harness.service.create(request);
+
+        assertThat(profile.getLabels()).containsEntry("env", "production");
+        assertThat(profile.getLabels()).containsEntry("cluster", "pg-prod");
+        assertThat(profile.getLabels()).containsEntry("role", "primary");
+    }
+
+    @Test
+    void createsProfileWithNoLabelsHasEmptyMap() {
+        Harness harness = harness();
+        ConnectionProfile profile = harness.service.create(createRequest("no-labels-pg"));
+
+        assertThat(profile.getLabels()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void rejectsInvalidLabelKeyOnCreate() {
+        Harness harness = harness();
+        ConnectionCreateRequest request = createRequest("bad-label-pg");
+        request.setLabels(Map.of("-invalid-key", "value"));
+
+        assertThatThrownBy(() -> harness.service.create(request))
+                .isInstanceOf(CoreApiException.class)
+                .hasMessageContaining("label key");
+    }
+
+    @Test
+    void rejectsLabelValueTooLongOnCreate() {
+        Harness harness = harness();
+        ConnectionCreateRequest request = createRequest("long-value-pg");
+        request.setLabels(Map.of("env", "v".repeat(257)));
+
+        assertThatThrownBy(() -> harness.service.create(request))
+                .isInstanceOf(CoreApiException.class)
+                .hasMessageContaining("label value");
+    }
+
+    @Test
+    void updatesLabelsOnPatch() {
+        Harness harness = harness();
+        ConnectionCreateRequest createReq = createRequest("update-labels-pg");
+        createReq.setLabels(Map.of("env", "staging"));
+        harness.service.create(createReq);
+
+        ConnectionUpdateRequest update = new ConnectionUpdateRequest();
+        Map<String, String> newLabels = new LinkedHashMap<>();
+        newLabels.put("env", "production");
+        newLabels.put("role", "primary");
+        update.setLabels(newLabels);
+
+        ConnectionProfileService.UpdateResult result = harness.service.update("update-labels-pg", update);
+
+        assertThat(result.profile().getLabels()).containsEntry("env", "production");
+        assertThat(result.profile().getLabels()).containsEntry("role", "primary");
+        assertThat(result.profile().getLabels()).doesNotContainKey("env-old");
+    }
+
+    @Test
+    void nullLabelsInUpdateDoesNotClearExistingLabels() {
+        Harness harness = harness();
+        ConnectionCreateRequest createReq = createRequest("preserve-labels-pg");
+        createReq.setLabels(Map.of("env", "production"));
+        harness.service.create(createReq);
+
+        ConnectionUpdateRequest update = new ConnectionUpdateRequest();
+        update.setLabels(null); // null means "do not change"
+
+        ConnectionProfileService.UpdateResult result = harness.service.update("preserve-labels-pg", update);
+
+        assertThat(result.profile().getLabels()).containsEntry("env", "production");
+    }
+
+    @Test
+    void emptyLabelsMapInUpdateClearsAllLabels() {
+        Harness harness = harness();
+        ConnectionCreateRequest createReq = createRequest("clear-labels-pg");
+        createReq.setLabels(Map.of("env", "production"));
+        harness.service.create(createReq);
+
+        ConnectionUpdateRequest update = new ConnectionUpdateRequest();
+        update.setLabels(Map.of()); // explicit empty map clears labels
+
+        ConnectionProfileService.UpdateResult result = harness.service.update("clear-labels-pg", update);
+
+        assertThat(result.profile().getLabels()).isEmpty();
+    }
+
+    @Test
+    void rejectsInvalidLabelKeyOnUpdate() {
+        Harness harness = harness();
+        harness.service.create(createRequest("bad-update-pg"));
+
+        ConnectionUpdateRequest update = new ConnectionUpdateRequest();
+        update.setLabels(Map.of("INVALID_UPPER", "value"));
+
+        assertThatThrownBy(() -> harness.service.update("bad-update-pg", update))
+                .isInstanceOf(CoreApiException.class)
+                .hasMessageContaining("label key");
+    }
+
+    @Test
+    void toResponseIncludesLabels() {
+        Harness harness = harness();
+        ConnectionCreateRequest request = createRequest("response-labels-pg");
+        request.setLabels(Map.of("env", "test"));
+        ConnectionProfile profile = harness.service.create(request);
+
+        var response = harness.service.toResponse(profile);
+
+        assertThat(response.getLabels()).containsEntry("env", "test");
     }
 
     private ConnectionCreateRequest createRequest(String profileId) {
