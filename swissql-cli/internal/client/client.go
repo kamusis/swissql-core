@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -37,9 +40,11 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
+// Status performs a lightweight health-check probe (with connection timeout).
+// Deprecated: use GetStatus() for a structured response.
 func (c *Client) Status() error {
-	url := fmt.Sprintf("%s/v1/status", c.BaseURL)
-	resp, err := c.getWithTimeout(url)
+	urlStr := fmt.Sprintf("%s/v1/status", c.BaseURL)
+	resp, err := c.getWithTimeout(urlStr)
 	if err != nil {
 		return err
 	}
@@ -50,6 +55,10 @@ func (c *Client) Status() error {
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// Request / Response types
+// ---------------------------------------------------------------------------
 
 type SqlExecuteRequest struct {
 	ProfileId  string            `json:"profile_id"`
@@ -118,6 +127,20 @@ type ConnectionCreateRequest struct {
 	Labels       map[string]string `json:"labels,omitempty"`
 }
 
+// ConnectionUpdateRequest uses pointer fields so that only explicitly-set
+// fields are included in the PATCH body (partial-update semantics).
+type ConnectionUpdateRequest struct {
+	Name          *string           `json:"name,omitempty"`
+	DbType        *string           `json:"db_type,omitempty"`
+	Dsn           *string           `json:"dsn,omitempty"`
+	Username      *string           `json:"username,omitempty"`
+	Password      *string           `json:"password,omitempty"`
+	SavePassword  *bool             `json:"save_password,omitempty"`
+	CredentialRef *string           `json:"credential_ref,omitempty"`
+	Enabled       *bool             `json:"enabled,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
+}
+
 type ConnectionTestResponse struct {
 	Status     string `json:"status"`
 	Ok         bool   `json:"ok"`
@@ -126,6 +149,50 @@ type ConnectionTestResponse struct {
 	DurationMs int64  `json:"duration_ms"`
 	Message    string `json:"message"`
 	TraceId    string `json:"trace_id"`
+}
+
+type ConnectionTestDraftRequest struct {
+	DbType        string `json:"db_type,omitempty"`
+	Dsn           string `json:"dsn,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
+	CredentialRef string `json:"credential_ref,omitempty"`
+	TimeoutMs     *int   `json:"timeout_ms,omitempty"`
+}
+
+type DbeaverImportResponse struct {
+	Discovered  int                        `json:"discovered"`
+	Created     int                        `json:"created"`
+	Skipped     int                        `json:"skipped"`
+	Overwritten int                        `json:"overwritten"`
+	Errors      []DbeaverImportError       `json:"errors"`
+	Profiles    []ConnectionProfileResponse `json:"profiles"`
+	TraceId     string                     `json:"trace_id"`
+}
+
+type DbeaverImportError struct {
+	ConnectionName string `json:"connection_name"`
+	Message        string `json:"message"`
+}
+
+type StatusResponse struct {
+	Status string `json:"status"`
+}
+
+type CapabilitiesResponse struct {
+	Version          string   `json:"version"`
+	Features         []string `json:"features"`
+	SupportedDbTypes []string `json:"supported_db_types"`
+	Endpoints        []string `json:"endpoints"`
+	TraceId          string   `json:"trace_id"`
+}
+
+// ConnectionsListFilter holds optional server-side filter parameters for ConnectionsListFiltered.
+type ConnectionsListFilter struct {
+	DbType       string
+	Enabled      *bool
+	NameContains string
+	Labels       []string
 }
 
 func (r *DriversResponse) HasDbType(dbType string) bool {
@@ -209,9 +276,13 @@ func sanitizeDbErrorMessage(msg string) string {
 	return strings.TrimSpace(s)
 }
 
+// ---------------------------------------------------------------------------
+// API methods
+// ---------------------------------------------------------------------------
+
 func (c *Client) SqlExecute(req *SqlExecuteRequest) (*ExecuteResponse, error) {
-	url := fmt.Sprintf("%s/v1/sql/execute", c.BaseURL)
-	respBody, err := c.post(url, req)
+	urlStr := fmt.Sprintf("%s/v1/sql/execute", c.BaseURL)
+	respBody, err := c.post(urlStr, req)
 	if err != nil {
 		return nil, err
 	}
@@ -224,8 +295,36 @@ func (c *Client) SqlExecute(req *SqlExecuteRequest) (*ExecuteResponse, error) {
 	return &resp, nil
 }
 
+// ConnectionsList returns all profiles with no filtering (convenience wrapper).
 func (c *Client) ConnectionsList() (*ConnectionsListResponse, error) {
-	urlStr := fmt.Sprintf("%s/v1/connections", c.BaseURL)
+	return c.ConnectionsListFiltered(ConnectionsListFilter{})
+}
+
+// ConnectionsListFiltered returns profiles filtered by the given criteria.
+// All filter fields are optional; omitting a field means no filtering on that dimension.
+func (c *Client) ConnectionsListFiltered(filter ConnectionsListFilter) (*ConnectionsListResponse, error) {
+	base := fmt.Sprintf("%s/v1/connections", c.BaseURL)
+	params := url.Values{}
+	if filter.DbType != "" {
+		params.Set("db_type", filter.DbType)
+	}
+	if filter.Enabled != nil {
+		if *filter.Enabled {
+			params.Set("enabled", "true")
+		} else {
+			params.Set("enabled", "false")
+		}
+	}
+	if filter.NameContains != "" {
+		params.Set("name_contains", filter.NameContains)
+	}
+	for _, label := range filter.Labels {
+		params.Add("label", label)
+	}
+	urlStr := base
+	if encoded := params.Encode(); encoded != "" {
+		urlStr = base + "?" + encoded
+	}
 	body, err := c.get(urlStr)
 	if err != nil {
 		return nil, err
@@ -233,6 +332,22 @@ func (c *Client) ConnectionsList() (*ConnectionsListResponse, error) {
 	defer body.Close()
 
 	var resp ConnectionsListResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ConnectionGet fetches a single profile by ID.
+func (c *Client) ConnectionGet(profileId string) (*ConnectionProfileResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/connections/%s", c.BaseURL, url.PathEscape(profileId))
+	body, err := c.get(urlStr)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp ConnectionProfileResponse
 	if err := json.NewDecoder(body).Decode(&resp); err != nil {
 		return nil, err
 	}
@@ -254,6 +369,35 @@ func (c *Client) ConnectionAdd(req *ConnectionCreateRequest) (*ConnectionProfile
 	return &resp, nil
 }
 
+// ConnectionUpdate sends a partial PATCH update. Only non-nil fields in req are sent.
+func (c *Client) ConnectionUpdate(profileId string, req *ConnectionUpdateRequest) (*ConnectionProfileResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/connections/%s", c.BaseURL, url.PathEscape(profileId))
+	body, err := c.patch(urlStr, req)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp ConnectionProfileResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ConnectionDelete deletes a profile by ID.
+func (c *Client) ConnectionDelete(profileId string) error {
+	urlStr := fmt.Sprintf("%s/v1/connections/%s", c.BaseURL, url.PathEscape(profileId))
+	body, err := c.delete(urlStr)
+	if err != nil {
+		return err
+	}
+	if body != nil {
+		body.Close()
+	}
+	return nil
+}
+
 func (c *Client) ConnectionTest(profileId string) (*ConnectionTestResponse, error) {
 	urlStr := fmt.Sprintf("%s/v1/connections/%s/test", c.BaseURL, url.PathEscape(profileId))
 	body, err := c.post(urlStr, map[string]interface{}{})
@@ -263,6 +407,38 @@ func (c *Client) ConnectionTest(profileId string) (*ConnectionTestResponse, erro
 	defer body.Close()
 
 	var resp ConnectionTestResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ConnectionTestDraft tests a draft connection without creating a profile.
+func (c *Client) ConnectionTestDraft(req *ConnectionTestDraftRequest) (*ConnectionTestResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/connections/test", c.BaseURL)
+	body, err := c.post(urlStr, req)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp ConnectionTestResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ConnectionImportDbeaver imports profiles from a DBeaver .dbp archive via multipart upload.
+func (c *Client) ConnectionImportDbeaver(filePath string, dryRun bool, onConflict string, namePrefix string) (*DbeaverImportResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/connections/import/dbeaver", c.BaseURL)
+	body, err := c.postMultipart(urlStr, filePath, dryRun, onConflict, namePrefix)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp DbeaverImportResponse
 	if err := json.NewDecoder(body).Decode(&resp); err != nil {
 		return nil, err
 	}
@@ -299,13 +475,49 @@ func (c *Client) CoreReloadDrivers() (*DriversReloadResponse, error) {
 	return &resp, nil
 }
 
-func (c *Client) post(url string, body interface{}) (io.ReadCloser, error) {
+// GetStatus returns the backend health status as a structured response.
+func (c *Client) GetStatus() (*StatusResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/status", c.BaseURL)
+	body, err := c.get(urlStr)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp StatusResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// GetCapabilities returns the backend capabilities (loaded drivers, feature flags).
+func (c *Client) GetCapabilities() (*CapabilitiesResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/capabilities", c.BaseURL)
+	body, err := c.get(urlStr)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp CapabilitiesResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers
+// ---------------------------------------------------------------------------
+
+func (c *Client) post(urlStr string, body interface{}) (io.ReadCloser, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest(http.MethodPost, urlStr, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, err
 	}
@@ -335,6 +547,42 @@ func (c *Client) post(url string, body interface{}) (io.ReadCloser, error) {
 			Message: msg,
 			TraceId: errResp.TraceId,
 		}
+	}
+
+	return resp.Body, nil
+}
+
+func (c *Client) patch(urlStr string, body interface{}) (io.ReadCloser, error) {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, urlStr, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		resp.Body.Close()
+		if errResp.Code != "" {
+			kind := ApiErrorKindAPI
+			msg := errResp.Message
+			if errResp.Code == "EXECUTION_ERROR" {
+				kind = ApiErrorKindDB
+				msg = sanitizeDbErrorMessage(msg)
+			}
+			return nil, &ApiError{Kind: kind, Status: resp.StatusCode, Code: errResp.Code, Message: msg, TraceId: errResp.TraceId}
+		}
+		return nil, &ApiError{Kind: ApiErrorKindAPI, Status: resp.StatusCode, Message: fmt.Sprintf("status=%d", resp.StatusCode)}
 	}
 
 	return resp.Body, nil
@@ -399,6 +647,63 @@ func (c *Client) delete(urlStr string) (io.ReadCloser, error) {
 				msg = sanitizeDbErrorMessage(msg)
 			}
 			return nil, &ApiError{Kind: kind, Status: resp.StatusCode, Code: errResp.Code, Message: msg, TraceId: errResp.TraceId}
+		}
+		return nil, &ApiError{Kind: ApiErrorKindAPI, Status: resp.StatusCode, Message: fmt.Sprintf("status=%d", resp.StatusCode)}
+	}
+
+	return resp.Body, nil
+}
+
+// postMultipart uploads a file as multipart/form-data with additional form fields.
+func (c *Client) postMultipart(urlStr string, filePath string, dryRun bool, onConflict string, namePrefix string) (io.ReadCloser, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	fw, err := mw.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(fw, f); err != nil {
+		return nil, err
+	}
+
+	if dryRun {
+		_ = mw.WriteField("dry_run", "true")
+	}
+	if onConflict != "" {
+		_ = mw.WriteField("on_conflict", onConflict)
+	}
+	if namePrefix != "" {
+		_ = mw.WriteField("name_prefix", namePrefix)
+	}
+
+	if err := mw.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, urlStr, &buf)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		var errResp ErrorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		resp.Body.Close()
+		if errResp.Code != "" {
+			return nil, &ApiError{Kind: ApiErrorKindAPI, Status: resp.StatusCode, Code: errResp.Code, Message: errResp.Message, TraceId: errResp.TraceId}
 		}
 		return nil, &ApiError{Kind: ApiErrorKindAPI, Status: resp.StatusCode, Message: fmt.Sprintf("status=%d", resp.StatusCode)}
 	}
@@ -484,5 +789,3 @@ func (c *Client) get(urlStr string) (io.ReadCloser, error) {
 
 	return resp.Body, nil
 }
-
-

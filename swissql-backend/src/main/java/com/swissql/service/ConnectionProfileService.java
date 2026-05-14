@@ -48,6 +48,46 @@ public class ConnectionProfileService {
         return profileStore.list();
     }
 
+    /**
+     * Returns profiles filtered by the given optional criteria. All non-null parameters are ANDed.
+     *
+     * @param dbType        exact match (case-insensitive) on {@code db_type}; null means no filter
+     * @param enabled       filter by enabled/disabled state; null means no filter
+     * @param nameContains  case-insensitive substring match on {@code name}; null/blank means no filter
+     * @param labels        profiles must have ALL specified labels (key:value pairs); null/empty means no filter
+     */
+    public List<ConnectionProfile> list(String dbType, Boolean enabled, String nameContains, List<String> labels) {
+        return profileStore.list().stream()
+                .filter(p -> dbType == null || p.getDbType().equalsIgnoreCase(dbType))
+                .filter(p -> enabled == null || p.isEnabled() == enabled)
+                .filter(p -> nameContains == null || nameContains.isBlank()
+                        || p.getName().toLowerCase(Locale.ROOT).contains(nameContains.toLowerCase(Locale.ROOT)))
+                .filter(p -> labels == null || labels.isEmpty() || matchesAllLabels(p, labels))
+                .toList();
+    }
+
+    /**
+     * Returns true if the profile has all the specified labels. Each label must be in {@code key:value} format.
+     */
+    private boolean matchesAllLabels(ConnectionProfile profile, List<String> labelFilters) {
+        Map<String, String> profileLabels = profile.getLabels();
+        if (profileLabels == null) {
+            return false;
+        }
+        for (String filter : labelFilters) {
+            int idx = filter.indexOf(':');
+            if (idx <= 0) {
+                continue; // skip malformed label filters
+            }
+            String key = filter.substring(0, idx);
+            String value = filter.substring(idx + 1);
+            if (!value.equals(profileLabels.get(key))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public ConnectionProfile getRequired(String profileId) {
         return profileStore.get(profileId)
                 .orElseThrow(() -> new CoreApiException("CONNECTION_NOT_FOUND", HttpStatus.NOT_FOUND, "Connection profile not found: " + profileId));

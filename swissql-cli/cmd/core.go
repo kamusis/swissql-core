@@ -22,7 +22,22 @@ var connectionsListCmd = &cobra.Command{
 	Short: "List backend connection profiles",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClientFromFlags(cmd)
-		resp, err := c.ConnectionsList()
+
+		dbType, _ := cmd.Flags().GetString("db-type")
+		nameContains, _ := cmd.Flags().GetString("name-contains")
+		labelPairs, _ := cmd.Flags().GetStringArray("label")
+
+		filter := client.ConnectionsListFilter{
+			DbType:       dbType,
+			NameContains: nameContains,
+			Labels:       labelPairs,
+		}
+		if cmd.Flags().Changed("enabled") {
+			v, _ := cmd.Flags().GetBool("enabled")
+			filter.Enabled = &v
+		}
+
+		resp, err := c.ConnectionsListFiltered(filter)
 		if err != nil {
 			return err
 		}
@@ -99,6 +114,155 @@ var connectionsTestCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClientFromFlags(cmd)
 		resp, err := c.ConnectionTest(args[0])
+		if err != nil {
+			return err
+		}
+		return printJSON(cmd, resp)
+	},
+}
+
+var connectionsGetCmd = &cobra.Command{
+	Use:   "get <profile-id>",
+	Short: "Get a backend connection profile by ID",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		resp, err := c.ConnectionGet(args[0])
+		if err != nil {
+			return err
+		}
+		return printJSON(cmd, resp)
+	},
+}
+
+var connectionsUpdateCmd = &cobra.Command{
+	Use:   "update <profile-id>",
+	Short: "Update a backend connection profile (partial update)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		req := &client.ConnectionUpdateRequest{}
+
+		if cmd.Flags().Changed("name") {
+			v, _ := cmd.Flags().GetString("name")
+			req.Name = &v
+		}
+		if cmd.Flags().Changed("db-type") {
+			v, _ := cmd.Flags().GetString("db-type")
+			req.DbType = &v
+		}
+		if cmd.Flags().Changed("dsn") {
+			v, _ := cmd.Flags().GetString("dsn")
+			req.Dsn = &v
+		}
+		if cmd.Flags().Changed("username") {
+			v, _ := cmd.Flags().GetString("username")
+			req.Username = &v
+		}
+		if cmd.Flags().Changed("password") {
+			v, _ := cmd.Flags().GetString("password")
+			req.Password = &v
+		}
+		if cmd.Flags().Changed("save-password") {
+			v, _ := cmd.Flags().GetBool("save-password")
+			req.SavePassword = &v
+		}
+		if cmd.Flags().Changed("credential-ref") {
+			v, _ := cmd.Flags().GetString("credential-ref")
+			req.CredentialRef = &v
+		}
+		if cmd.Flags().Changed("enabled") {
+			v, _ := cmd.Flags().GetBool("enabled")
+			req.Enabled = &v
+		}
+
+		resp, err := c.ConnectionUpdate(args[0], req)
+		if err != nil {
+			return err
+		}
+		return printJSON(cmd, resp)
+	},
+}
+
+var connectionsDeleteCmd = &cobra.Command{
+	Use:   "delete <profile-id>",
+	Short: "Delete a backend connection profile",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		if err := c.ConnectionDelete(args[0]); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Connection profile %q deleted.\n", args[0])
+		return nil
+	},
+}
+
+var connectionsTestDraftCmd = &cobra.Command{
+	Use:   "test-draft",
+	Short: "Test a draft connection without creating a profile",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		req := &client.ConnectionTestDraftRequest{
+			DbType:        mustGetStringFlag(cmd, "db-type"),
+			Dsn:           mustGetStringFlag(cmd, "dsn"),
+			Username:      mustGetStringFlag(cmd, "username"),
+			Password:      mustGetStringFlag(cmd, "password"),
+			CredentialRef: mustGetStringFlag(cmd, "credential-ref"),
+		}
+		if req.DbType == "" || req.Dsn == "" {
+			return fmt.Errorf("--db-type and --dsn are required")
+		}
+		resp, err := c.ConnectionTestDraft(req)
+		if err != nil {
+			return err
+		}
+		return printJSON(cmd, resp)
+	},
+}
+
+var connectionsImportCmd = &cobra.Command{
+	Use:   "import",
+	Short: "Import connection profiles from external sources",
+}
+
+var connectionsImportDbeaverCmd = &cobra.Command{
+	Use:   "dbeaver <file>",
+	Short: "Import connection profiles from a DBeaver .dbp archive",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		onConflict, _ := cmd.Flags().GetString("on-conflict")
+		namePrefix, _ := cmd.Flags().GetString("name-prefix")
+
+		resp, err := c.ConnectionImportDbeaver(args[0], dryRun, onConflict, namePrefix)
+		if err != nil {
+			return err
+		}
+		return printJSON(cmd, resp)
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show backend health status",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		resp, err := c.GetStatus()
+		if err != nil {
+			return err
+		}
+		return printJSON(cmd, resp)
+	},
+}
+
+var capabilitiesCmd = &cobra.Command{
+	Use:   "capabilities",
+	Short: "Show backend capabilities (loaded drivers and feature flags)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newClientFromFlags(cmd)
+		resp, err := c.GetCapabilities()
 		if err != nil {
 			return err
 		}
@@ -267,6 +431,20 @@ func init() {
 	connectionsCmd.AddCommand(connectionsListCmd)
 	connectionsCmd.AddCommand(connectionsAddCmd)
 	connectionsCmd.AddCommand(connectionsTestCmd)
+	connectionsCmd.AddCommand(connectionsGetCmd)
+	connectionsCmd.AddCommand(connectionsUpdateCmd)
+	connectionsCmd.AddCommand(connectionsDeleteCmd)
+	connectionsCmd.AddCommand(connectionsTestDraftCmd)
+	connectionsCmd.AddCommand(connectionsImportCmd)
+	connectionsImportCmd.AddCommand(connectionsImportDbeaverCmd)
+
+	// connections list flags
+	connectionsListCmd.Flags().String("db-type", "", "Filter by database type (exact match, case-insensitive)")
+	connectionsListCmd.Flags().Bool("enabled", false, "Filter by enabled state (use --enabled=true or --enabled=false)")
+	connectionsListCmd.Flags().String("name-contains", "", "Filter by name substring (case-insensitive)")
+	connectionsListCmd.Flags().StringArray("label", nil, "Filter by label in key:value format (repeatable, ANDed)")
+
+	// connections add flags
 	connectionsAddCmd.Flags().String("profile-id", "", "Stable backend profile ID")
 	connectionsAddCmd.Flags().String("name", "", "Profile display name")
 	connectionsAddCmd.Flags().String("db-type", "", "Database type")
@@ -275,6 +453,31 @@ func init() {
 	connectionsAddCmd.Flags().String("password", "", "Database password")
 	connectionsAddCmd.Flags().Bool("save-password", true, "Persist the password in backend storage")
 	connectionsAddCmd.Flags().StringArray("label", nil, "Label in key=value format (repeatable, e.g. --label env=production --label role=primary)")
+
+	// connections update flags
+	connectionsUpdateCmd.Flags().String("name", "", "New profile display name")
+	connectionsUpdateCmd.Flags().String("db-type", "", "New database type")
+	connectionsUpdateCmd.Flags().String("dsn", "", "New DSN")
+	connectionsUpdateCmd.Flags().String("username", "", "New database username")
+	connectionsUpdateCmd.Flags().String("password", "", "New database password")
+	connectionsUpdateCmd.Flags().Bool("save-password", false, "Persist the new password in backend storage")
+	connectionsUpdateCmd.Flags().String("credential-ref", "", "New credential reference (e.g. env:MY_VAR)")
+	connectionsUpdateCmd.Flags().Bool("enabled", false, "Enable or disable the profile")
+
+	// connections test-draft flags
+	connectionsTestDraftCmd.Flags().String("db-type", "", "Database type (required)")
+	connectionsTestDraftCmd.Flags().String("dsn", "", "DSN to test (required)")
+	connectionsTestDraftCmd.Flags().String("username", "", "Database username")
+	connectionsTestDraftCmd.Flags().String("password", "", "Database password")
+	connectionsTestDraftCmd.Flags().String("credential-ref", "", "Credential reference (e.g. env:MY_VAR)")
+
+	// connections import dbeaver flags
+	connectionsImportDbeaverCmd.Flags().Bool("dry-run", false, "Simulate import without persisting profiles")
+	connectionsImportDbeaverCmd.Flags().String("on-conflict", "fail", "Conflict resolution: fail, overwrite, or skip")
+	connectionsImportDbeaverCmd.Flags().String("name-prefix", "", "Prefix to prepend to imported profile names")
+
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(capabilitiesCmd)
 
 	rootCmd.AddCommand(coreDriversCmd)
 	coreDriversCmd.AddCommand(coreDriversListCmd)

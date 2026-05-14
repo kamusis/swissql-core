@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -235,6 +236,160 @@ class ConnectionProfileServiceTest {
         var response = harness.service.toResponse(profile);
 
         assertThat(response.getLabels()).containsEntry("env", "test");
+    }
+
+    @Test
+    void listWithNoFiltersReturnsAll() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+        ConnectionCreateRequest oraReq = createRequest("ora-1");
+        oraReq.setDbType("oracle");
+        harness.service.create(oraReq);
+
+        List<ConnectionProfile> result = harness.service.list(null, null, null, null);
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void listFiltersByDbType() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+        ConnectionCreateRequest oraReq = createRequest("ora-1");
+        oraReq.setDbType("oracle");
+        harness.service.create(oraReq);
+
+        List<ConnectionProfile> result = harness.service.list("postgresql", null, null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getProfileId()).isEqualTo("pg-1");
+    }
+
+    @Test
+    void listFiltersByDbTypeCaseInsensitive() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+
+        List<ConnectionProfile> result = harness.service.list("POSTGRESQL", null, null, null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void listFiltersByEnabled() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-enabled"));
+        ConnectionCreateRequest disabledReq = createRequest("pg-disabled");
+        disabledReq.setEnabled(false);
+        harness.service.create(disabledReq);
+
+        List<ConnectionProfile> enabled = harness.service.list(null, true, null, null);
+        List<ConnectionProfile> disabled = harness.service.list(null, false, null, null);
+
+        assertThat(enabled).hasSize(1);
+        assertThat(enabled.get(0).getProfileId()).isEqualTo("pg-enabled");
+        assertThat(disabled).hasSize(1);
+        assertThat(disabled.get(0).getProfileId()).isEqualTo("pg-disabled");
+    }
+
+    @Test
+    void listFiltersByNameContains() {
+        Harness harness = harness();
+        ConnectionCreateRequest req1 = createRequest("pg-primary");
+        req1.setName("PG Primary");
+        harness.service.create(req1);
+        ConnectionCreateRequest req2 = createRequest("pg-replica");
+        req2.setName("PG Replica");
+        harness.service.create(req2);
+
+        List<ConnectionProfile> result = harness.service.list(null, null, "primary", null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getProfileId()).isEqualTo("pg-primary");
+    }
+
+    @Test
+    void listFiltersByNameContainsCaseInsensitive() {
+        Harness harness = harness();
+        ConnectionCreateRequest req = createRequest("pg-primary");
+        req.setName("PG Primary");
+        harness.service.create(req);
+
+        List<ConnectionProfile> result = harness.service.list(null, null, "PRIMARY", null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void listFiltersByLabel() {
+        Harness harness = harness();
+        ConnectionCreateRequest req1 = createRequest("pg-prod");
+        req1.setLabels(Map.of("cluster", "pg-prod", "role", "primary"));
+        harness.service.create(req1);
+        ConnectionCreateRequest req2 = createRequest("pg-staging");
+        req2.setLabels(Map.of("cluster", "pg-staging", "role", "primary"));
+        harness.service.create(req2);
+
+        List<ConnectionProfile> result = harness.service.list(null, null, null, List.of("cluster:pg-prod"));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getProfileId()).isEqualTo("pg-prod");
+    }
+
+    @Test
+    void listFiltersByMultipleLabelsAnded() {
+        Harness harness = harness();
+        ConnectionCreateRequest req1 = createRequest("pg-prod-primary");
+        req1.setLabels(Map.of("cluster", "pg-prod", "role", "primary"));
+        harness.service.create(req1);
+        ConnectionCreateRequest req2 = createRequest("pg-prod-replica");
+        req2.setLabels(Map.of("cluster", "pg-prod", "role", "replica"));
+        harness.service.create(req2);
+
+        List<ConnectionProfile> result = harness.service.list(null, null, null, List.of("cluster:pg-prod", "role:primary"));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getProfileId()).isEqualTo("pg-prod-primary");
+    }
+
+    @Test
+    void listCombinesMultipleFilters() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+        ConnectionCreateRequest req2 = createRequest("pg-2");
+        req2.setName("PG Primary");
+        harness.service.create(req2);
+        ConnectionCreateRequest oraReq = createRequest("ora-1");
+        oraReq.setDbType("oracle");
+        oraReq.setName("ORA Primary");
+        harness.service.create(oraReq);
+
+        List<ConnectionProfile> result = harness.service.list("postgresql", null, "primary", null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getProfileId()).isEqualTo("pg-2");
+    }
+
+    @Test
+    void listWithEmptyLabelFilterReturnsAll() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+        harness.service.create(createRequest("pg-2"));
+
+        List<ConnectionProfile> result = harness.service.list(null, null, null, List.of());
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void listWithBlankNameContainsReturnsAll() {
+        Harness harness = harness();
+        harness.service.create(createRequest("pg-1"));
+        harness.service.create(createRequest("pg-2"));
+
+        List<ConnectionProfile> result = harness.service.list(null, null, "  ", null);
+
+        assertThat(result).hasSize(2);
     }
 
     private ConnectionCreateRequest createRequest(String profileId) {

@@ -110,7 +110,7 @@ curl -X POST http://localhost:8080/v1/sql/execute \
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/v1/connections` | List all profiles |
+| `GET` | `/v1/connections` | List profiles (supports filter query params) |
 | `POST` | `/v1/connections` | Create a profile |
 | `GET` | `/v1/connections/{profile_id}` | Get a profile |
 | `PATCH` | `/v1/connections/{profile_id}` | Update a profile |
@@ -118,6 +118,23 @@ curl -X POST http://localhost:8080/v1/sql/execute \
 | `POST` | `/v1/connections/test` | Test a draft connection (no profile required) |
 | `POST` | `/v1/connections/{profile_id}/test` | Test an existing profile |
 | `POST` | `/v1/connections/import/dbeaver` | Import profiles from a DBeaver `.dbp` archive |
+
+#### Filtering `GET /v1/connections`
+
+All parameters are optional and ANDed together:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `db_type` | string | Exact match, case-insensitive |
+| `enabled` | boolean | Filter by enabled/disabled state |
+| `name_contains` | string | Case-insensitive substring match on `name` |
+| `label` | string (repeatable) | Match profiles that have all specified labels (`key:value`) |
+
+```bash
+GET /v1/connections?db_type=postgres
+GET /v1/connections?enabled=true&name_contains=primary
+GET /v1/connections?label=cluster:pg-prod&label=role:primary
+```
 
 ### Connection Profile Labels
 
@@ -180,6 +197,14 @@ swissql connections add \
 ```
 
 The `--label` flag is repeatable. Each value must be in `key=value` format.
+
+**CLI — filter connections list by label:**
+
+```bash
+swissql connections list --label cluster:pg-prod --label role:primary
+```
+
+Note: `--label` on `connections list` uses `key:value` format (colon separator) to match the backend query parameter convention.
 
 ### SQL Execution
 
@@ -395,6 +420,123 @@ export SPRING_PROFILES_ACTIVE=local
 ```bash
 mvn -f swissql-backend/pom.xml test
 ```
+
+## CLI Commands
+
+The `swissql` CLI is a thin client that calls the backend REST API. All commands accept the global `--server` and `--connection-timeout` flags.
+
+### Status and Capabilities
+
+```bash
+# Backend health check
+swissql status
+
+# Loaded drivers and feature flags
+swissql capabilities
+```
+
+### Connection Profiles
+
+```bash
+# List all profiles
+swissql connections list
+
+# Filter profiles server-side
+swissql connections list --db-type postgres
+swissql connections list --enabled=true
+swissql connections list --name-contains primary
+swissql connections list --label cluster:pg-prod --label role:primary
+
+# Get a single profile
+swissql connections get <profile-id>
+
+# Create a profile
+swissql connections add \
+  --profile-id pg-primary \
+  --name "PG Primary" \
+  --db-type postgres \
+  --dsn postgres://host:5432/mydb \
+  --username postgres \
+  --password secret \
+  --save-password=true
+
+# Update a profile (only supplied flags are sent — partial update)
+swissql connections update pg-primary --name "PG Primary v2" --enabled=true
+swissql connections update pg-primary --dsn postgres://newhost:5432/mydb --password newpass
+
+# Delete a profile
+swissql connections delete pg-primary
+
+# Test an existing profile
+swissql connections test pg-primary
+
+# Test a draft connection without creating a profile
+swissql connections test-draft \
+  --db-type postgres \
+  --dsn postgres://localhost:5432/mydb \
+  --password secret
+```
+
+#### `connections list` filter flags
+
+| Flag | Description |
+|------|-------------|
+| `--db-type <type>` | Exact match on `db_type` (case-insensitive) |
+| `--enabled` | Filter by enabled state (`--enabled=true` or `--enabled=false`) |
+| `--name-contains <str>` | Case-insensitive substring match on `name` |
+| `--label <key:value>` | Match profiles with this label (repeatable, ANDed) |
+
+#### `connections update` flags
+
+All flags are optional. Only flags that are explicitly provided are included in the PATCH request.
+
+| Flag | Description |
+|------|-------------|
+| `--name` | New display name |
+| `--db-type` | New database type |
+| `--dsn` | New DSN |
+| `--username` | New username |
+| `--password` | New password |
+| `--save-password` | Persist the new password |
+| `--credential-ref` | New credential reference (e.g. `env:MY_VAR`) |
+| `--enabled` | Enable or disable the profile |
+
+### Import from DBeaver
+
+```bash
+# Import from a DBeaver .dbp archive
+swissql connections import dbeaver connections.dbp
+
+# Dry run — validate without persisting
+swissql connections import dbeaver connections.dbp --dry-run
+
+# Skip conflicts, add a name prefix
+swissql connections import dbeaver connections.dbp \
+  --on-conflict skip \
+  --name-prefix "imported-"
+```
+
+| Flag | Values | Default | Description |
+|------|--------|---------|-------------|
+| `--dry-run` | — | `false` | Simulate import without persisting |
+| `--on-conflict` | `fail\|skip\|overwrite` | `fail` | Conflict resolution strategy |
+| `--name-prefix` | string | — | Prefix prepended to imported profile names |
+
+### JDBC Drivers
+
+```bash
+swissql drivers list
+swissql drivers reload
+```
+
+### Execute SQL
+
+```bash
+swissql exec --profile-id <profile-id> "<sql>"
+swissql exec --profile-id <profile-id> -f query.sql
+```
+
+See the [CLI Configuration](#cli-configuration) section for all `exec` flags.
 
 ## CLI Setup for AI Agents
 

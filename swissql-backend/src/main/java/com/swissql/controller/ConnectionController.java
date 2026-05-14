@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 @RestController
 @RequestMapping("/v1/connections")
 public class ConnectionController {
@@ -46,9 +47,15 @@ public class ConnectionController {
     }
 
     @GetMapping
-    public ResponseEntity<ConnectionsListResponse> list() {
+    public ResponseEntity<ConnectionsListResponse> list(
+            @RequestParam(value = "db_type", required = false) String dbType,
+            @RequestParam(value = "enabled", required = false) Boolean enabled,
+            @RequestParam(value = "name_contains", required = false) String nameContains,
+            @RequestParam(value = "label", required = false) List<String> labels
+    ) {
         ConnectionsListResponse response = new ConnectionsListResponse();
-        response.setConnections(profileService.list().stream().map(profileService::toResponse).toList());
+        response.setConnections(profileService.list(dbType, enabled, nameContains, labels)
+                .stream().map(profileService::toResponse).toList());
         response.setTraceId(MDC.get("trace_id"));
         return ResponseEntity.ok(response);
     }
