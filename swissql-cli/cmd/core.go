@@ -66,6 +66,11 @@ var connectionsAddCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClientFromFlags(cmd)
 		savePassword, _ := cmd.Flags().GetBool("save-password")
+		labelPairs, _ := cmd.Flags().GetStringArray("label")
+		labels, err := parseLabels(labelPairs)
+		if err != nil {
+			return err
+		}
 		req := &client.ConnectionCreateRequest{
 			ProfileId:    mustGetStringFlag(cmd, "profile-id"),
 			Name:         mustGetStringFlag(cmd, "name"),
@@ -74,6 +79,7 @@ var connectionsAddCmd = &cobra.Command{
 			Username:     mustGetStringFlag(cmd, "username"),
 			Password:     mustGetStringFlag(cmd, "password"),
 			SavePassword: &savePassword,
+			Labels:       labels,
 		}
 		if req.Name == "" || req.DbType == "" || req.Dsn == "" {
 			return fmt.Errorf("--name, --db-type, and --dsn are required")
@@ -209,6 +215,23 @@ var execCmd = &cobra.Command{
 	},
 }
 
+func parseLabels(pairs []string) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	labels := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		idx := strings.Index(pair, "=")
+		if idx <= 0 {
+			return nil, fmt.Errorf("invalid --label %q: expected key=value format", pair)
+		}
+		key := pair[:idx]
+		value := pair[idx+1:]
+		labels[key] = value
+	}
+	return labels, nil
+}
+
 func newClientFromFlags(cmd *cobra.Command) *client.Client {
 	server, _ := cmd.Flags().GetString("server")
 	timeoutMs, _ := cmd.Flags().GetInt("connection-timeout")
@@ -251,6 +274,7 @@ func init() {
 	connectionsAddCmd.Flags().String("username", "", "Database username")
 	connectionsAddCmd.Flags().String("password", "", "Database password")
 	connectionsAddCmd.Flags().Bool("save-password", true, "Persist the password in backend storage")
+	connectionsAddCmd.Flags().StringArray("label", nil, "Label in key=value format (repeatable, e.g. --label env=production --label role=primary)")
 
 	rootCmd.AddCommand(coreDriversCmd)
 	coreDriversCmd.AddCommand(coreDriversListCmd)
