@@ -198,7 +198,7 @@ func injectGuide(existing, guideContent string) string {
 		return block + "\n"
 	}
 	// Ensure there is exactly one blank line before the appended block.
-	sep := "\n"
+	sep := ""
 	if !strings.HasSuffix(existing, "\n") {
 		sep = "\n\n"
 	} else if !strings.HasSuffix(existing, "\n\n") {

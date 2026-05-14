@@ -152,6 +152,23 @@ func TestInjectGuide_NoTrailingNewlineInExisting(t *testing.T) {
 	}
 }
 
+func TestInjectGuide_DoubleTrailingNewlineInExisting(t *testing.T) {
+	existing := "# Prompt\n\nSome content.\n\n" // already ends with \n\n
+	result := injectGuide(existing, sampleGuide)
+
+	if !strings.Contains(result, FenceBegin) {
+		t.Errorf("expected FenceBegin in result")
+	}
+	// Should not have triple newlines (double blank line).
+	if strings.Contains(result, "\n\n\n") {
+		t.Errorf("unexpected triple newline (double blank line) in result:\n%q", result)
+	}
+	// Block should follow immediately after the existing double newline.
+	if !strings.Contains(result, "\n\n"+FenceBegin) {
+		t.Errorf("expected exactly one blank line before FenceBegin, got:\n%q", result)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // buildBlock tests
 // ---------------------------------------------------------------------------
