@@ -450,7 +450,7 @@ swissql connections list --label cluster:pg-prod --label role:primary
 # Get a single profile
 swissql connections get <profile-id>
 
-# Create a profile
+# Create a profile (password auth)
 swissql connections add \
   --profile-id pg-primary \
   --name "PG Primary" \
@@ -458,11 +458,36 @@ swissql connections add \
   --dsn postgres://host:5432/mydb \
   --username postgres \
   --password secret \
-  --save-password=true
+  --save-password=true \
+  --label env=production \
+  --label role=primary
+
+# Create a profile (external credential reference, no password stored)
+swissql connections add \
+  --profile-id pg-primary \
+  --name "PG Primary" \
+  --db-type postgres \
+  --dsn postgres://host:5432/mydb \
+  --username postgres \
+  --credential-ref env:PG_PASSWORD
+
+# Create a profile disabled by default
+swissql connections add \
+  --profile-id pg-staging \
+  --name "PG Staging" \
+  --db-type postgres \
+  --dsn postgres://staging:5432/mydb \
+  --enabled=false
 
 # Update a profile (only supplied flags are sent — partial update)
 swissql connections update pg-primary --name "PG Primary v2" --enabled=true
 swissql connections update pg-primary --dsn postgres://newhost:5432/mydb --password newpass
+
+# Update labels (replaces all existing labels)
+swissql connections update pg-primary --label env=production --label role=replica
+
+# Remove all labels
+swissql connections update pg-primary --clear-labels
 
 # Delete a profile
 swissql connections delete pg-primary
@@ -486,6 +511,21 @@ swissql connections test-draft \
 | `--name-contains <str>` | Case-insensitive substring match on `name` |
 | `--label <key:value>` | Match profiles with this label (repeatable, ANDed) |
 
+#### `connections add` flags
+
+| Flag | Description |
+|------|-------------|
+| `--profile-id` | Stable profile ID (auto-generated if omitted) |
+| `--name` | Display name (required) |
+| `--db-type` | Database type (required) |
+| `--dsn` | Password-free DSN (required) |
+| `--username` | Database username |
+| `--password` | Database password |
+| `--save-password` | Persist the password in backend storage (default `true`) |
+| `--credential-ref` | External credential reference instead of `--password` (e.g. `env:MY_VAR`, `local:<profile-id>`) |
+| `--enabled` | Whether the profile is enabled on creation (default `true`) |
+| `--label <key=value>` | Label in `key=value` format (repeatable) |
+
 #### `connections update` flags
 
 All flags are optional. Only flags that are explicitly provided are included in the PATCH request.
@@ -500,6 +540,8 @@ All flags are optional. Only flags that are explicitly provided are included in 
 | `--save-password` | Persist the new password |
 | `--credential-ref` | New credential reference (e.g. `env:MY_VAR`) |
 | `--enabled` | Enable or disable the profile |
+| `--label <key=value>` | Replace all labels with these pairs (repeatable) |
+| `--clear-labels` | Remove all labels from the profile |
 
 ### Import from DBeaver
 

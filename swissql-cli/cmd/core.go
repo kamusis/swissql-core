@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ var connectionsListCmd = &cobra.Command{
 		}
 		rows := make([]map[string]interface{}, 0, len(resp.Connections))
 		for _, profile := range resp.Connections {
-			rows = append(rows, map[string]interface{}{
+			row := map[string]interface{}{
 				"profile_id":            profile.ProfileId,
 				"name":                  profile.Name,
 				"db_type":               profile.DbType,
@@ -52,7 +53,12 @@ var connectionsListCmd = &cobra.Command{
 				"credential_configured": profile.CredentialConfigured,
 				"credential_source":     profile.CredentialSource,
 				"enabled":               profile.Enabled,
-			})
+				"source":                formatSource(profile.Source),
+				"labels":                formatLabels(profile.Labels),
+				"created_at":            formatTime(profile.CreatedAt),
+				"updated_at":            formatTime(profile.UpdatedAt),
+			}
+			rows = append(rows, row)
 		}
 		renderResponse(cmd, &client.ExecuteResponse{
 			Type: "tabular",
@@ -66,6 +72,10 @@ var connectionsListCmd = &cobra.Command{
 					{Name: "credential_configured", Type: "boolean"},
 					{Name: "credential_source", Type: "string"},
 					{Name: "enabled", Type: "boolean"},
+					{Name: "source", Type: "string"},
+					{Name: "labels", Type: "string"},
+					{Name: "created_at", Type: "string"},
+					{Name: "updated_at", Type: "string"},
 				},
 				Rows: rows,
 			},
@@ -87,14 +97,19 @@ var connectionsAddCmd = &cobra.Command{
 			return err
 		}
 		req := &client.ConnectionCreateRequest{
-			ProfileId:    mustGetStringFlag(cmd, "profile-id"),
-			Name:         mustGetStringFlag(cmd, "name"),
-			DbType:       mustGetStringFlag(cmd, "db-type"),
-			Dsn:          mustGetStringFlag(cmd, "dsn"),
-			Username:     mustGetStringFlag(cmd, "username"),
-			Password:     mustGetStringFlag(cmd, "password"),
-			SavePassword: &savePassword,
-			Labels:       labels,
+			ProfileId:     mustGetStringFlag(cmd, "profile-id"),
+			Name:          mustGetStringFlag(cmd, "name"),
+			DbType:        mustGetStringFlag(cmd, "db-type"),
+			Dsn:           mustGetStringFlag(cmd, "dsn"),
+			Username:      mustGetStringFlag(cmd, "username"),
+			Password:      mustGetStringFlag(cmd, "password"),
+			SavePassword:  &savePassword,
+			CredentialRef: mustGetStringFlag(cmd, "credential-ref"),
+			Labels:        labels,
+		}
+		if cmd.Flags().Changed("enabled") {
+			v, _ := cmd.Flags().GetBool("enabled")
+			req.Enabled = &v
 		}
 		if req.Name == "" || req.DbType == "" || req.Dsn == "" {
 			return fmt.Errorf("--name, --db-type, and --dsn are required")
@@ -174,6 +189,17 @@ var connectionsUpdateCmd = &cobra.Command{
 		if cmd.Flags().Changed("enabled") {
 			v, _ := cmd.Flags().GetBool("enabled")
 			req.Enabled = &v
+		}
+		if cmd.Flags().Changed("clear-labels") {
+			empty := map[string]string{}
+			req.Labels = &empty
+		} else if cmd.Flags().Changed("label") {
+			labelPairs, _ := cmd.Flags().GetStringArray("label")
+			labels, err := parseLabels(labelPairs)
+			if err != nil {
+				return err
+			}
+			req.Labels = &labels
 		}
 
 		resp, err := c.ConnectionUpdate(args[0], req)
@@ -379,6 +405,40 @@ var execCmd = &cobra.Command{
 	},
 }
 
+// formatLabels converts a labels map to a sorted "key=value,..." string for display.
+func formatLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = k + "=" + labels[k]
+	}
+	return strings.Join(parts, ",")
+}
+
+func formatSource(s *client.ProfileSource) string {
+	if s == nil || s.Kind == "" {
+		return ""
+	}
+	if s.Provider != "" {
+		return s.Kind + "/" + s.Provider
+	}
+	return s.Kind
+}
+
+func formatTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
 func parseLabels(pairs []string) (map[string]string, error) {
 	if len(pairs) == 0 {
 		return nil, nil
@@ -452,6 +512,8 @@ func init() {
 	connectionsAddCmd.Flags().String("username", "", "Database username")
 	connectionsAddCmd.Flags().String("password", "", "Database password")
 	connectionsAddCmd.Flags().Bool("save-password", true, "Persist the password in backend storage")
+	connectionsAddCmd.Flags().String("credential-ref", "", "Credential reference instead of password (e.g. env:MY_VAR)")
+	connectionsAddCmd.Flags().Bool("enabled", true, "Whether the profile is enabled")
 	connectionsAddCmd.Flags().StringArray("label", nil, "Label in key=value format (repeatable, e.g. --label env=production --label role=primary)")
 
 	// connections update flags
@@ -463,6 +525,8 @@ func init() {
 	connectionsUpdateCmd.Flags().Bool("save-password", false, "Persist the new password in backend storage")
 	connectionsUpdateCmd.Flags().String("credential-ref", "", "New credential reference (e.g. env:MY_VAR)")
 	connectionsUpdateCmd.Flags().Bool("enabled", false, "Enable or disable the profile")
+	connectionsUpdateCmd.Flags().StringArray("label", nil, "Replace all labels with these key=value pairs (repeatable)")
+	connectionsUpdateCmd.Flags().Bool("clear-labels", false, "Remove all labels from the profile")
 
 	// connections test-draft flags
 	connectionsTestDraftCmd.Flags().String("db-type", "", "Database type (required)")

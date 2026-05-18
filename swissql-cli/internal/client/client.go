@@ -104,6 +104,13 @@ type ConnectionsListResponse struct {
 	TraceId     string                      `json:"trace_id"`
 }
 
+type ProfileSource struct {
+	Kind         string `json:"kind"`
+	Provider     string `json:"provider,omitempty"`
+	Driver       string `json:"driver,omitempty"`
+	ConnectionId string `json:"connection_id,omitempty"`
+}
+
 type ConnectionProfileResponse struct {
 	ProfileId            string            `json:"profile_id"`
 	Name                 string            `json:"name"`
@@ -113,32 +120,38 @@ type ConnectionProfileResponse struct {
 	CredentialConfigured bool              `json:"credential_configured"`
 	CredentialSource     string            `json:"credential_source"`
 	Enabled              bool              `json:"enabled"`
+	Source               *ProfileSource    `json:"source,omitempty"`
 	Labels               map[string]string `json:"labels,omitempty"`
+	CreatedAt            *time.Time        `json:"created_at,omitempty"`
+	UpdatedAt            *time.Time        `json:"updated_at,omitempty"`
 }
 
 type ConnectionCreateRequest struct {
-	ProfileId    string            `json:"profile_id,omitempty"`
-	Name         string            `json:"name"`
-	DbType       string            `json:"db_type"`
-	Dsn          string            `json:"dsn"`
-	Username     string            `json:"username,omitempty"`
-	Password     string            `json:"password,omitempty"`
-	SavePassword *bool             `json:"save_password,omitempty"`
-	Labels       map[string]string `json:"labels,omitempty"`
+	ProfileId     string            `json:"profile_id,omitempty"`
+	Name          string            `json:"name"`
+	DbType        string            `json:"db_type"`
+	Dsn           string            `json:"dsn"`
+	Username      string            `json:"username,omitempty"`
+	Password      string            `json:"password,omitempty"`
+	SavePassword  *bool             `json:"save_password,omitempty"`
+	CredentialRef string            `json:"credential_ref,omitempty"`
+	Enabled       *bool             `json:"enabled,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
 }
 
 // ConnectionUpdateRequest uses pointer fields so that only explicitly-set
 // fields are included in the PATCH body (partial-update semantics).
+// Labels uses a pointer so nil means "do not change" while an empty map clears all labels.
 type ConnectionUpdateRequest struct {
-	Name          *string           `json:"name,omitempty"`
-	DbType        *string           `json:"db_type,omitempty"`
-	Dsn           *string           `json:"dsn,omitempty"`
-	Username      *string           `json:"username,omitempty"`
-	Password      *string           `json:"password,omitempty"`
-	SavePassword  *bool             `json:"save_password,omitempty"`
-	CredentialRef *string           `json:"credential_ref,omitempty"`
-	Enabled       *bool             `json:"enabled,omitempty"`
-	Labels        map[string]string `json:"labels,omitempty"`
+	Name          *string            `json:"name,omitempty"`
+	DbType        *string            `json:"db_type,omitempty"`
+	Dsn           *string            `json:"dsn,omitempty"`
+	Username      *string            `json:"username,omitempty"`
+	Password      *string            `json:"password,omitempty"`
+	SavePassword  *bool              `json:"save_password,omitempty"`
+	CredentialRef *string            `json:"credential_ref,omitempty"`
+	Enabled       *bool              `json:"enabled,omitempty"`
+	Labels        *map[string]string `json:"labels,omitempty"`
 }
 
 type ConnectionTestResponse struct {
@@ -161,13 +174,13 @@ type ConnectionTestDraftRequest struct {
 }
 
 type DbeaverImportResponse struct {
-	Discovered  int                        `json:"discovered"`
-	Created     int                        `json:"created"`
-	Skipped     int                        `json:"skipped"`
-	Overwritten int                        `json:"overwritten"`
-	Errors      []DbeaverImportError       `json:"errors"`
+	Discovered  int                         `json:"discovered"`
+	Created     int                         `json:"created"`
+	Skipped     int                         `json:"skipped"`
+	Overwritten int                         `json:"overwritten"`
+	Errors      []DbeaverImportError        `json:"errors"`
 	Profiles    []ConnectionProfileResponse `json:"profiles"`
-	TraceId     string                     `json:"trace_id"`
+	TraceId     string                      `json:"trace_id"`
 }
 
 type DbeaverImportError struct {

@@ -441,3 +441,68 @@ func TestClient_GetCapabilities(t *testing.T) {
 		t.Fatalf("did not see GET /v1/capabilities")
 	}
 }
+
+func TestConnectionUpdateRequestLabelsSerialization(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		labels      *map[string]string
+		wantPresent bool // whether "labels" key should appear in JSON
+		wantEmpty   bool   // whether value should be empty object {}
+	}{
+		{
+			name:        "nil labels omitted",
+			labels:      nil,
+			wantPresent: false,
+		},
+		{
+			name:        "empty map serializes as {} to clear labels",
+			labels:      func() *map[string]string { m := map[string]string{}; return &m }(),
+			wantPresent: true,
+			wantEmpty:   true,
+		},
+		{
+			name:        "non-empty map serializes with entries",
+			labels:      func() *map[string]string { m := map[string]string{"env": "prod"}; return &m }(),
+			wantPresent: true,
+			wantEmpty:   false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := ConnectionUpdateRequest{Labels: tc.labels}
+			b, err := json.Marshal(req)
+			if err != nil {
+				t.Fatalf("marshal error: %v", err)
+			}
+
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(b, &raw); err != nil {
+				t.Fatalf("unmarshal error: %v", err)
+			}
+
+			labelsRaw, present := raw["labels"]
+			if present != tc.wantPresent {
+				t.Fatalf("labels present=%v, want %v (body: %s)", present, tc.wantPresent, b)
+			}
+			if !tc.wantPresent {
+				return
+			}
+
+			var labelsMap map[string]string
+			if err := json.Unmarshal(labelsRaw, &labelsMap); err != nil {
+				t.Fatalf("unmarshal labels: %v", err)
+			}
+			if tc.wantEmpty && len(labelsMap) != 0 {
+				t.Fatalf("expected empty labels map, got %v", labelsMap)
+			}
+			if !tc.wantEmpty && len(labelsMap) == 0 {
+				t.Fatalf("expected non-empty labels map, got empty")
+			}
+		})
+	}
+}
