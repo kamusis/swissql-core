@@ -82,9 +82,9 @@ type FileSystem interface {
 // osFS is the production FileSystem backed by the real OS.
 type osFS struct{}
 
-func (osFS) Stat(path string) (os.FileInfo, error)            { return os.Stat(path) }
-func (osFS) ReadFile(path string) ([]byte, error)             { return os.ReadFile(path) }
-func (osFS) MkdirAll(path string, perm os.FileMode) error     { return os.MkdirAll(path, perm) }
+func (osFS) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (osFS) ReadFile(path string) ([]byte, error)         { return os.ReadFile(path) }
+func (osFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
 func (osFS) WriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -94,9 +94,9 @@ func (osFS) WriteFile(path string, data []byte, perm os.FileMode) error {
 
 // Runner executes the setup logic.
 type Runner struct {
-	fs      FileSystem
-	agents  []Agent
-	guide   string // content of swissql-cli-guide.md
+	fs     FileSystem
+	agents []Agent
+	guide  string // content of swissql-cli-guide.md
 }
 
 // NewRunner creates a Runner using the real OS filesystem and the default

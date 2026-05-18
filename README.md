@@ -425,12 +425,26 @@ mvn -f swissql-backend/pom.xml test
 
 The `swissql` CLI is a thin client that calls the backend REST API. All commands accept the global `--server` and `--connection-timeout` flags.
 
-### Status and Capabilities
+### Version and Status
 
 ```bash
-# Backend health check
+# CLI version only (no backend call)
+swissql --version
+
+# CLI version + backend version
+swissql version
+
+# CLI version + backend version + backend health (exits non-zero if backend unreachable)
 swissql status
 
+# JSON output (version and status both support --output-format json)
+swissql version --output-format json
+swissql status --output-format json
+```
+
+### Capabilities
+
+```bash
 # Loaded drivers and feature flags
 swissql capabilities
 ```

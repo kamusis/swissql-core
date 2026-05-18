@@ -40,22 +40,6 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-// Status performs a lightweight health-check probe (with connection timeout).
-// Deprecated: use GetStatus() for a structured response.
-func (c *Client) Status() error {
-	urlStr := fmt.Sprintf("%s/v1/status", c.BaseURL)
-	resp, err := c.getWithTimeout(urlStr)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("API error: status=%d", resp.StatusCode)
-	}
-	return nil
-}
-
 // ---------------------------------------------------------------------------
 // Request / Response types
 // ---------------------------------------------------------------------------
@@ -189,7 +173,8 @@ type DbeaverImportError struct {
 }
 
 type StatusResponse struct {
-	Status string `json:"status"`
+	Status     string `json:"status"`
+	AppVersion string `json:"app_version,omitempty"`
 }
 
 type CapabilitiesResponse struct {

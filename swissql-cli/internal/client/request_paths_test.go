@@ -449,7 +449,7 @@ func TestConnectionUpdateRequestLabelsSerialization(t *testing.T) {
 		name        string
 		labels      *map[string]string
 		wantPresent bool // whether "labels" key should appear in JSON
-		wantEmpty   bool   // whether value should be empty object {}
+		wantEmpty   bool // whether value should be empty object {}
 	}{
 		{
 			name:        "nil labels omitted",

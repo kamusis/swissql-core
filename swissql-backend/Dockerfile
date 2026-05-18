@@ -5,8 +5,9 @@ WORKDIR /workspace
 COPY pom.xml ./
 RUN mvn -B -q -DskipTests dependency:go-offline
 
+ARG APP_VERSION=dev
 COPY src ./src
-RUN mvn -B -DskipTests package
+RUN mvn -B -DskipTests -Drevision=${APP_VERSION} package
 
 RUN JAR_PATH=$(ls -1 target/*.jar | grep -v '\\.original$' | head -n 1) && \
     test -n "$JAR_PATH" && \

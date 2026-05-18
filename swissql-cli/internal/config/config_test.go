@@ -86,8 +86,8 @@ func TestLoadConfig_DoesNotOverwriteExistingFile(t *testing.T) {
 		Server:              "http://custom:9090",
 		ConnectionTimeoutMs: 9999,
 		OutputFormat:        "json",
-		Output: OutputConfig{Table: TableConfig{MaxColWidth: 99}},
-		Exec:   ExecConfig{Limit: 42},
+		Output:              OutputConfig{Table: TableConfig{MaxColWidth: 99}},
+		Exec:                ExecConfig{Limit: 42},
 	}
 	if err := saveConfigToPath(path, custom); err != nil {
 		t.Fatalf("setup: %v", err)

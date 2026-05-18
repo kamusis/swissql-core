@@ -6,8 +6,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "swissql",
-	Short: "SwissQL Core CLI — a cross-database command-line tool",
+	Use:     "swissql",
+	Version: Version,
+	Short:   "SwissQL Core CLI — a cross-database command-line tool",
 	Long: `SwissQL Core CLI provides a unified interface for managing database
 connections, executing SQL, and inspecting JDBC drivers via the SwissQL backend.
 
