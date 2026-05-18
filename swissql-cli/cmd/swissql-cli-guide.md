@@ -67,22 +67,88 @@ Returns JSON including `source`, `labels`, `created_at`, `updated_at`.
 
 Create a new connection profile.
 
+**PostgreSQL (password)**
+
 ```bash
 swissql connections add \
-  --profile-id <id> \
-  --name <name> \
-  --db-type <oracle|postgres|mysql|...> \
-  --dsn <dsn> \
-  --username <user> \
-  --password <pass> \
+  --profile-id pg-primary \
+  --name "PG Primary" \
+  --db-type postgres \
+  --dsn postgres://host:5432/mydb \
+  --username postgres \
+  --password secret \
   --save-password=true \
-  --label cluster=pg-prod \
+  --label env=production \
   --label role=primary
+```
+
+**PostgreSQL (external credential reference — no password stored)**
+
+```bash
+swissql connections add \
+  --profile-id pg-primary \
+  --name "PG Primary" \
+  --db-type postgres \
+  --dsn postgres://host:5432/mydb \
+  --username postgres \
+  --credential-ref env:PG_PASSWORD
+```
+
+**MySQL**
+
+```bash
+swissql connections add \
+  --profile-id mysql-main \
+  --name "MySQL Main" \
+  --db-type mysql \
+  --dsn mysql://host:3306/mydb \
+  --username root \
+  --password secret \
+  --save-password=true
+```
+
+**Oracle**
+
+```bash
+swissql connections add \
+  --profile-id oracle-prod \
+  --name "Oracle Prod" \
+  --db-type oracle \
+  --dsn oracle://host:1521/ORCLPDB1 \
+  --username hr \
+  --password secret \
+  --save-password=true
+```
+
+**Create disabled (enable later)**
+
+```bash
+swissql connections add \
+  --profile-id pg-staging \
+  --name "PG Staging" \
+  --db-type postgres \
+  --dsn postgres://staging:5432/mydb \
+  --username postgres \
+  --password secret \
+  --enabled=false
 ```
 
 Required: `--name`, `--db-type`, `--dsn`.
 
 Labels are optional key/value metadata. Use `--label key=value` (repeatable). Note: `--label` on `add` uses `=` separator; on `list` it uses `:` separator.
+
+| Flag | Description |
+|------|-------------|
+| `--profile-id` | Stable profile ID (auto-generated if omitted) |
+| `--name` | Display name (required) |
+| `--db-type` | Database type (required) |
+| `--dsn` | Password-free DSN (required) |
+| `--username` | Database username |
+| `--password` | Database password |
+| `--save-password` | Persist password in backend storage (default `true`) |
+| `--credential-ref` | External credential instead of `--password` (e.g. `env:MY_VAR`, `local:<profile-id>`) |
+| `--enabled` | Whether the profile is enabled on creation (default `true`) |
+| `--label <key=value>` | Label metadata (repeatable) |
 
 ### Update a Connection
 
@@ -98,6 +164,12 @@ Examples:
 swissql connections update pg-primary --name "PG Primary v2" --enabled=true
 swissql connections update pg-primary --dsn postgres://newhost:5432/mydb --password newpass
 swissql connections update pg-primary --credential-ref env:PROD_PG_PASSWORD
+
+# Replace all labels
+swissql connections update pg-primary --label env=production --label role=replica
+
+# Remove all labels
+swissql connections update pg-primary --clear-labels
 ```
 
 Flags:
@@ -112,6 +184,8 @@ Flags:
 | `--save-password` | Persist the new password in backend storage |
 | `--credential-ref` | New credential reference (e.g. `env:MY_VAR`) |
 | `--enabled` | Enable or disable the profile |
+| `--label <key=value>` | Replace all labels with these pairs (repeatable) |
+| `--clear-labels` | Remove all labels from the profile |
 
 ### Delete a Connection
 
