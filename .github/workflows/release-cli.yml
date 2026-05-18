@@ -90,7 +90,12 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           BIN_NAME="swissql_${{ needs.prepare.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.ext }}"
-          go build -trimpath -ldflags "-s -w" -o "dist/${BIN_NAME}" ./
+          BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -trimpath \
+            -ldflags "-s -w \
+              -X github.com/kamusis/swissql/swissql-cli/cmd.Version=${{ needs.prepare.outputs.version }} \
+              -X github.com/kamusis/swissql/swissql-cli/cmd.BuildTime=${BUILD_TIME}" \
+            -o "dist/${BIN_NAME}" ./
         working-directory: swissql-cli
 
       - name: Upload artifact

@@ -20,8 +20,10 @@ mvn -f swissql-backend/pom.xml compile -q
 mvn -f swissql-backend/pom.xml test -q
 
 # CLI (Go)
-cd swissql-cli && go vet ./...
-cd swissql-cli && go test ./...
+env GOWORK=off gofmt -w swissql-cli
+test -z "$(env GOWORK=off gofmt -l swissql-cli)"
+env GOWORK=off go -C swissql-cli vet ./...
+env GOWORK=off go -C swissql-cli test ./...
 
 ### 3. Analyze change patterns
 
@@ -48,6 +50,16 @@ git log --since="1 week ago" --pretty=format:"%h %s" --no-merges
 - [ ] Adequate code comments and documentation
 - [ ] Test coverage for new functionality
 - [ ] No code duplication
+
+**Single Source of Truth Review:**
+
+- [ ] Shared behavior is implemented once and reused through helpers, services, or utilities
+- [ ] Repeated parsing, formatting, validation, serialization, or error-mapping logic is extracted instead of copied
+- [ ] CLI commands reuse common client/rendering helpers instead of hand-rolling request or output behavior
+- [ ] Backend controllers delegate business rules to services instead of duplicating logic across endpoints
+- [ ] Constants, field names, endpoint paths, error codes, and version strings come from one authoritative location where practical
+- [ ] Tests cover shared helpers directly when multiple call sites depend on them
+- [ ] Intentional duplication is explicitly justified by different semantics, not convenience
 
 **Architecture Review:**
 
@@ -89,6 +101,8 @@ git log --since="1 week ago" --pretty=format:"%h %s" --no-merges
 - Output via renderResponse, not fmt.Printf tables
 - client.NewClient() for backend communication
 - No local state (no ~/.swissql writes)
+- Shared flag parsing, request construction, formatting, and JSON/table output use helpers
+- New or modified Go files are formatted with gofmt before review
 ```
 
 **Documentation Changes:**
@@ -99,6 +113,7 @@ git log --since="1 week ago" --pretty=format:"%h %s" --no-merges
 - AGENTS.md reflects current package structure
 - Example curl commands use /v1/connections and /v1/sql/execute
 - No references to removed endpoints (session, AI, sampler, collector, metadata)
+- Authoritative docs are edited at their source file, not generated or pointer copies
 ```
 
 ### 6. Generate review summary
@@ -149,7 +164,9 @@ git log --since="1 week ago" --pretty=format:"%h %s" --no-merges
 
 ```bash
 #!/bin/sh
-cd swissql-cli && go fmt ./... && go vet ./...
+env GOWORK=off gofmt -w swissql-cli
+test -z "$(env GOWORK=off gofmt -l swissql-cli)"
+env GOWORK=off go -C swissql-cli vet ./...
 mvn -f swissql-backend/pom.xml compile -q
 ```
 
@@ -160,7 +177,9 @@ mvn -f swissql-backend/pom.xml compile -q
 
 - [ ] Security review completed (no credentials, passwords masked)
 - [ ] No business logic added to CLI
+- [ ] Shared logic has a single source of truth; duplicated behavior is extracted or justified
 - [ ] CLI output uses renderResponse
+- [ ] Go changes are gofmt-formatted and verified from `swissql-cli` with `GOWORK=off`
 - [ ] New endpoints follow Core API pattern (profile-based, no session IDs)
 - [ ] Tests added/updated
 - [ ] Documentation updated

@@ -272,14 +272,16 @@ var connectionsImportDbeaverCmd = &cobra.Command{
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show backend health status",
+	Short: "Show CLI and backend version with backend health status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := newClientFromFlags(cmd)
-		resp, err := c.GetStatus()
-		if err != nil {
-			return err
+		resp, fetchErr := c.GetStatus()
+		backendVersion, backendStatus := resolveBackendInfo(resp, fetchErr)
+		renderVersionStatus(cmd, backendVersion, backendStatus)
+		if fetchErr != nil {
+			return fmt.Errorf("backend unreachable: %w", fetchErr)
 		}
-		return printJSON(cmd, resp)
+		return nil
 	},
 }
 

@@ -2,15 +2,49 @@ package cmd
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+// resetFlagSet resets pflag's internal parsed state and clears all Changed flags.
+// pflag refuses to re-parse an already-parsed FlagSet; since cobra commands are
+// package-level singletons, we must reset between Execute() calls in tests.
+func resetFlagSet(fs *pflag.FlagSet) {
+	// pflag.FlagSet.parsed is unexported; use reflect+unsafe to reset it so the
+	// FlagSet can be re-parsed on the next Execute() call.
+	v := reflect.ValueOf(fs).Elem().FieldByName("parsed")
+	if v.IsValid() {
+		*(*bool)(unsafe.Pointer(v.UnsafeAddr())) = false
+	}
+	fs.VisitAll(func(f *pflag.Flag) {
+		f.Changed = false
+		_ = f.Value.Set(f.DefValue) // reset to default so GetBool("help") returns false
+	})
+}
+
+// resetCmdTree recursively resets flag state for a command and all its subcommands.
+func resetCmdTree(cmd *cobra.Command) {
+	resetFlagSet(cmd.Flags())
+	resetFlagSet(cmd.PersistentFlags())
+	for _, sub := range cmd.Commands() {
+		resetCmdTree(sub)
+	}
+}
 
 // executeRootCmd runs the cobra root command with the given args and captures stdout/stderr.
 func executeRootCmd(t *testing.T, args ...string) (stdout string, stderr string, err error) {
 	t.Helper()
 
 	// Cobra commands are global singletons in this package; avoid parallel execution.
+	// Reset package-level state that may have been mutated by a previous test.
+	outputFormat = "table"
+	resetCmdTree(rootCmd)
+
 	outBuf := new(bytes.Buffer)
 	errBuf := new(bytes.Buffer)
 
