@@ -237,6 +237,12 @@ type RulesValidateResponse struct {
 	Labels                    map[string]string `json:"labels"`
 }
 
+type RulesInitResponse struct {
+	Path     string `json:"path"`
+	Mode     string `json:"mode"`
+	Reloaded bool   `json:"reloaded"`
+}
+
 // ConnectionsListFilter holds optional server-side filter parameters for ConnectionsListFiltered.
 type ConnectionsListFilter struct {
 	DbType       string
@@ -562,6 +568,22 @@ func (c *Client) GetCapabilities() (*CapabilitiesResponse, error) {
 func (c *Client) RulesExamples(mode string) (io.ReadCloser, error) {
 	urlStr := fmt.Sprintf("%s/v1/sql/rules/examples?mode=%s", c.BaseURL, mode)
 	return c.get(urlStr)
+}
+
+// RulesInit initializes sql-rules.yaml on the backend machine (POST /v1/sql/rules/init?mode=...&force=...).
+func (c *Client) RulesInit(mode string, force bool) (*RulesInitResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/sql/rules/init?mode=%s&force=%t", c.BaseURL, mode, force)
+	body, err := c.post(urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp RulesInitResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &resp, nil
 }
 
 // RulesList fetches the active SQL rule set from the backend (GET /v1/sql/rules).

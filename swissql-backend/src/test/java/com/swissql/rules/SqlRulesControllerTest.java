@@ -9,9 +9,12 @@ import com.swissql.model.ConnectionProfile;
 import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -165,7 +168,7 @@ class SqlRulesControllerTest {
         ConnectionProfileService profileService = mock(ConnectionProfileService.class);
         when(profileService.getRequired("billing-prod")).thenReturn(prodProfile);
 
-        SqlRulesController controller = new SqlRulesController(new SqlRuleEngine(rules), profileService);
+        SqlRulesController controller = new SqlRulesController(new SqlRuleEngine(rules), profileService, System.getProperty("java.io.tmpdir"));
 
         SqlRulesValidateRequest req = new SqlRulesValidateRequest("TRUNCATE invoices", "billing-prod", false);
         SqlRulesValidateResponse resp = controller.validate(req).getBody();
@@ -249,11 +252,71 @@ class SqlRulesControllerTest {
     }
 
     // -------------------------------------------------------------------------
+    // POST /v1/sql/rules/init
+    // -------------------------------------------------------------------------
+
+    @Test
+    void init_blacklist_writes_file_and_reloads(@TempDir Path tempDir) throws Exception {
+        SqlRuleEngine engine = SqlRuleEngine.fallback();
+        SqlRulesController controller = controllerWithDataDir(engine, tempDir);
+
+        ResponseEntity<?> response = controller.init("blacklist", false);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(tempDir.resolve("sql-rules.yaml")).exists();
+        assertThat(Files.readString(tempDir.resolve("sql-rules.yaml"))).contains("default_action: allow");
+    }
+
+    @Test
+    void init_whitelist_writes_file(@TempDir Path tempDir) throws Exception {
+        SqlRulesController controller = controllerWithDataDir(SqlRuleEngine.fallback(), tempDir);
+
+        controller.init("whitelist", false);
+
+        assertThat(Files.readString(tempDir.resolve("sql-rules.yaml"))).contains("default_action: deny");
+    }
+
+    @Test
+    void init_refuses_overwrite_without_force(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("sql-rules.yaml"), "existing");
+        SqlRulesController controller = controllerWithDataDir(SqlRuleEngine.fallback(), tempDir);
+
+        assertThatThrownBy(() -> controller.init("blacklist", false))
+                .isInstanceOf(CoreApiException.class)
+                .satisfies(ex -> assertThat(((CoreApiException) ex).getStatus())
+                        .isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void init_force_overwrites_existing_file(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("sql-rules.yaml"), "old content");
+        SqlRulesController controller = controllerWithDataDir(SqlRuleEngine.fallback(), tempDir);
+
+        controller.init("blacklist", true);
+
+        assertThat(Files.readString(tempDir.resolve("sql-rules.yaml"))).contains("default_action: allow");
+    }
+
+    @Test
+    void init_invalid_mode_throws_400(@TempDir Path tempDir) {
+        SqlRulesController controller = controllerWithDataDir(SqlRuleEngine.fallback(), tempDir);
+
+        assertThatThrownBy(() -> controller.init("invalid", false))
+                .isInstanceOf(CoreApiException.class)
+                .satisfies(ex -> assertThat(((CoreApiException) ex).getStatus())
+                        .isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private SqlRulesController controller(SqlRuleEngine engine, SqlRuleLoader loader) {
-        return new SqlRulesController(engine, null);
+        return new SqlRulesController(engine, null, null);
+    }
+
+    private SqlRulesController controllerWithDataDir(SqlRuleEngine engine, Path dataDir) {
+        return new SqlRulesController(engine, null, dataDir.toString());
     }
 
     private SqlRuleSet rules(String defaultAction, String defaultRuleId,

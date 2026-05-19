@@ -1,5 +1,6 @@
 package com.swissql.rules;
 
+import com.swissql.api.SqlRulesInitResponse;
 import com.swissql.api.SqlRulesReloadResponse;
 import com.swissql.api.SqlRulesResponse;
 import com.swissql.api.SqlRulesValidateRequest;
@@ -7,6 +8,7 @@ import com.swissql.api.SqlRulesValidateResponse;
 import com.swissql.model.ConnectionProfile;
 import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Map;
 
 @RestController
@@ -28,10 +33,14 @@ public class SqlRulesController {
 
     private final SqlRuleEngine ruleEngine;
     private final ConnectionProfileService profileService;
+    private final String dataDir;
 
-    public SqlRulesController(SqlRuleEngine ruleEngine, ConnectionProfileService profileService) {
+    public SqlRulesController(SqlRuleEngine ruleEngine,
+                              ConnectionProfileService profileService,
+                              @Value("${swissql.data-dir:${user.home}/.swissql}") String dataDir) {
         this.ruleEngine = ruleEngine;
         this.profileService = profileService;
+        this.dataDir = dataDir;
     }
 
     @GetMapping
@@ -88,6 +97,38 @@ public class SqlRulesController {
             throw new CoreApiException("EXAMPLE_NOT_FOUND", HttpStatus.INTERNAL_SERVER_ERROR,
                     "Could not read example file: " + resourceName);
         }
+    }
+
+    @PostMapping("/init")
+    public ResponseEntity<SqlRulesInitResponse> init(
+            @RequestParam(name = "mode", required = false) String mode,
+            @RequestParam(name = "force", defaultValue = "false") boolean force) {
+        if (mode == null || (!mode.equals("blacklist") && !mode.equals("whitelist"))) {
+            throw new CoreApiException("INVALID_MODE", HttpStatus.BAD_REQUEST,
+                    "mode must be 'blacklist' or 'whitelist'");
+        }
+        Path target = Path.of(dataDir, "sql-rules.yaml");
+        if (!force && Files.exists(target)) {
+            throw new CoreApiException("FILE_EXISTS", HttpStatus.CONFLICT,
+                    target + " already exists (use force=true to overwrite)");
+        }
+        String resourceName = "sql-rules-" + mode + ".example.yaml";
+        try {
+            ClassPathResource resource = new ClassPathResource(resourceName);
+            byte[] bytes = resource.getInputStream().readAllBytes();
+            Files.createDirectories(target.getParent());
+            Files.write(target, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+            throw new CoreApiException("INIT_FAILED", HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to write " + target + ": " + e.getMessage());
+        }
+        boolean reloaded = false;
+        try {
+            ruleEngine.reload();
+            reloaded = true;
+        } catch (Exception ignored) {
+        }
+        return ResponseEntity.ok(new SqlRulesInitResponse(target.toString(), mode, reloaded));
     }
 
     @PostMapping("/validate")
