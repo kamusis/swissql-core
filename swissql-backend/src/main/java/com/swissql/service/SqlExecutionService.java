@@ -3,6 +3,8 @@ package com.swissql.service;
 import com.swissql.api.ExecuteResponse;
 import com.swissql.api.SqlExecuteRequest;
 import com.swissql.model.ConnectionProfile;
+import com.swissql.rules.SqlRuleDecision;
+import com.swissql.rules.SqlRuleEngine;
 import com.swissql.util.JdbcJsonSafe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,20 +29,25 @@ public class SqlExecutionService {
 
     private final ConnectionProfileService profileService;
     private final ConnectionPoolService poolService;
+    private final SqlRuleEngine ruleEngine;
 
-    public SqlExecutionService(ConnectionProfileService profileService, ConnectionPoolService poolService) {
+    public SqlExecutionService(ConnectionProfileService profileService,
+                               ConnectionPoolService poolService,
+                               SqlRuleEngine ruleEngine) {
         this.profileService = profileService;
         this.poolService = poolService;
+        this.ruleEngine = ruleEngine;
     }
 
     public ExecuteResponse execute(SqlExecuteRequest request) {
-        // Safety check fires before profile resolution — audit as "blocked" if rejected.
+        String sql = request.getSql();
+
+        // Shape validation — must pass before profile resolution
         try {
-            SqlSafetyValidator.validate(request.getSql(), request.isAllowWrite());
+            SqlSafetyValidator.validateShape(sql);
         } catch (CoreApiException e) {
             auditLog.warn("profile_id={} db_type=unknown allow_write={} outcome=blocked duration_ms=0 trace_id={} sql={}",
-                    request.getProfileId(), request.isAllowWrite(),
-                    MDC.get("trace_id"), request.getSql());
+                    request.getProfileId(), request.isAllowWrite(), MDC.get("trace_id"), sql);
             throw e;
         }
 
@@ -49,11 +56,37 @@ public class SqlExecutionService {
             throw new CoreApiException("CONNECTION_DISABLED", HttpStatus.BAD_REQUEST, "Connection profile is disabled");
         }
 
+        // Rule engine evaluation — deny rules fire before allow rules
+        SqlRuleDecision decision = ruleEngine.evaluate(sql, profile);
+
+        if (!decision.allowed()) {
+            auditLog.warn(
+                    "profile_id={} db_type={} allow_write={} rule_id={} rule_action={} default_action_used={} write_like={} request_allow_write_required={} outcome=blocked duration_ms=0 trace_id={} sql={}",
+                    profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    decision.matchedRuleId(), decision.action(), decision.defaultActionUsed(),
+                    decision.writeLike(), decision.requestAllowWriteRequired(),
+                    MDC.get("trace_id"), sql);
+            throw new CoreApiException("SQL_DENIED", HttpStatus.FORBIDDEN,
+                    "SQL denied by rule: " + decision.matchedRuleId());
+        }
+
+        // Write-like gate — rule allows the SQL shape, but write confirmation is still required
+        if (decision.requestAllowWriteRequired() && !request.isAllowWrite()) {
+            auditLog.warn(
+                    "profile_id={} db_type={} allow_write={} rule_id={} rule_action={} default_action_used={} write_like={} request_allow_write_required={} outcome=blocked duration_ms=0 trace_id={} sql={}",
+                    profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    decision.matchedRuleId(), decision.action(), decision.defaultActionUsed(),
+                    decision.writeLike(), decision.requestAllowWriteRequired(),
+                    MDC.get("trace_id"), sql);
+            throw new CoreApiException("INVALID_REQUEST", HttpStatus.BAD_REQUEST,
+                    "Write SQL requires allow_write=true");
+        }
+
         long startTime = System.currentTimeMillis();
         try (Connection connection = poolService.getConnection(profile);
              Statement statement = connection.createStatement()) {
             applyOptions(statement, request.getOptions());
-            boolean isResultSet = statement.execute(request.getSql());
+            boolean isResultSet = statement.execute(sql);
             long duration = System.currentTimeMillis() - startTime;
 
             ExecuteResponse response = new ExecuteResponse();
@@ -75,29 +108,41 @@ public class SqlExecutionService {
             }
             response.setMetadata(metadata);
 
-            auditLog.info("profile_id={} db_type={} allow_write={} outcome=success duration_ms={} rows={} rows_affected={} truncated={} trace_id={} sql={}",
+            auditLog.info(
+                    "profile_id={} db_type={} allow_write={} rule_id={} rule_action={} default_action_used={} write_like={} request_allow_write_required={} outcome=success duration_ms={} rows={} rows_affected={} truncated={} trace_id={} sql={}",
                     profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
+                    decision.matchedRuleId(), decision.action(), decision.defaultActionUsed(),
+                    decision.writeLike(), decision.requestAllowWriteRequired(),
                     duration, metadata.getRowsReturned(), metadata.getRowsAffected(),
-                    metadata.isTruncated(), MDC.get("trace_id"), request.getSql());
+                    metadata.isTruncated(), MDC.get("trace_id"), sql);
 
             return response;
         } catch (SQLTimeoutException e) {
             long duration = System.currentTimeMillis() - startTime;
-            auditLog.warn("profile_id={} db_type={} allow_write={} outcome=timeout duration_ms={} error={} trace_id={} sql={}",
+            auditLog.warn(
+                    "profile_id={} db_type={} allow_write={} rule_id={} rule_action={} default_action_used={} write_like={} request_allow_write_required={} outcome=timeout duration_ms={} error={} trace_id={} sql={}",
                     profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
-                    duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
+                    decision.matchedRuleId(), decision.action(), decision.defaultActionUsed(),
+                    decision.writeLike(), decision.requestAllowWriteRequired(),
+                    duration, e.getMessage(), MDC.get("trace_id"), sql);
             throw new CoreApiException("SQL_TIMEOUT", HttpStatus.REQUEST_TIMEOUT, "SQL execution timed out", e.getMessage());
         } catch (CoreApiException e) {
             long duration = System.currentTimeMillis() - startTime;
-            auditLog.warn("profile_id={} db_type={} allow_write={} outcome=error duration_ms={} error={} trace_id={} sql={}",
+            auditLog.warn(
+                    "profile_id={} db_type={} allow_write={} rule_id={} rule_action={} default_action_used={} write_like={} request_allow_write_required={} outcome=error duration_ms={} error={} trace_id={} sql={}",
                     profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
-                    duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
+                    decision.matchedRuleId(), decision.action(), decision.defaultActionUsed(),
+                    decision.writeLike(), decision.requestAllowWriteRequired(),
+                    duration, e.getMessage(), MDC.get("trace_id"), sql);
             throw e;
         } catch (SQLException e) {
             long duration = System.currentTimeMillis() - startTime;
-            auditLog.warn("profile_id={} db_type={} allow_write={} outcome=error duration_ms={} error={} trace_id={} sql={}",
+            auditLog.warn(
+                    "profile_id={} db_type={} allow_write={} rule_id={} rule_action={} default_action_used={} write_like={} request_allow_write_required={} outcome=error duration_ms={} error={} trace_id={} sql={}",
                     profile.getProfileId(), profile.getDbType(), request.isAllowWrite(),
-                    duration, e.getMessage(), MDC.get("trace_id"), request.getSql());
+                    decision.matchedRuleId(), decision.action(), decision.defaultActionUsed(),
+                    decision.writeLike(), decision.requestAllowWriteRequired(),
+                    duration, e.getMessage(), MDC.get("trace_id"), sql);
             throw new CoreApiException("SQL_EXECUTION_ERROR", HttpStatus.BAD_REQUEST, "SQL execution failed", e.getMessage());
         }
     }

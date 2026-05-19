@@ -8,6 +8,7 @@ import com.swissql.model.ConnectionProfile;
 import com.swissql.storage.CredentialStore;
 import com.swissql.storage.ProfileStore;
 import com.swissql.util.DbTypeNormalizer;
+import com.swissql.util.IdValidator;
 import com.swissql.util.ProfileDsn;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,7 @@ import java.util.regex.Pattern;
 
 @Service
 public class ConnectionProfileService {
-    private static final Pattern PROFILE_ID_PATTERN = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}");
+    private static final java.util.regex.Pattern PROFILE_ID_PATTERN = IdValidator.ID_PATTERN;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final ProfileStore profileStore;

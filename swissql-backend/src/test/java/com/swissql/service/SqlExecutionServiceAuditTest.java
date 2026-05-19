@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swissql.api.ConnectionCreateRequest;
 import com.swissql.api.SqlExecuteRequest;
 import com.swissql.driver.DriverRegistry;
+import com.swissql.rules.SqlRuleEngine;
 import com.swissql.storage.CredentialStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,7 +75,7 @@ class SqlExecutionServiceAuditTest {
         profileService.create(create);
 
         stubPool = new StubConnectionPoolService(resolver);
-        service = new SqlExecutionService(profileService, stubPool);
+        service = new SqlExecutionService(profileService, stubPool, SqlRuleEngine.fallback());
     }
 
     @AfterEach
@@ -203,7 +204,6 @@ class SqlExecutionServiceAuditTest {
 
     @Test
     void auditLoggedOnBlocked() {
-        // Pool is never called — validator fires before getConnection().
         SqlExecuteRequest req = request("test-pg", "DROP TABLE users", false);
         assertThatThrownBy(() -> service.execute(req))
                 .isInstanceOf(CoreApiException.class)
@@ -214,10 +214,12 @@ class SqlExecutionServiceAuditTest {
         String msg = entries.get(0).getFormattedMessage();
         assertThat(msg)
                 .contains("outcome=blocked")
-                .contains("db_type=unknown")
+                .contains("db_type=postgres")
                 .contains("duration_ms=0")
                 .contains("profile_id=test-pg")
-                .contains("DROP TABLE users");
+                .contains("DROP TABLE users")
+                .contains("write_like=true")
+                .contains("request_allow_write_required=true");
     }
 
     // -------------------------------------------------------------------------

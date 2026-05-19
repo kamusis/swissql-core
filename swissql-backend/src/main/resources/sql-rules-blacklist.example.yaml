@@ -1,0 +1,75 @@
+# Blacklist-mode example: default_action=allow, explicitly block what is forbidden.
+# Most rules live in the deny list; allow rules are rarely needed.
+#
+# Usage: copy to $SWISSQL_DATA_DIR/sql-rules.yaml and adjust to your environment.
+
+version: "1"
+default_action: allow
+default_rule_id: default-allow
+
+deny:
+  # --- DDL: schema-destructive statements ---
+  - id: block-drop
+    description: "Block DROP TABLE / DROP INDEX / DROP SCHEMA etc."
+    scope: global
+    match:
+      first_keyword:
+        - DROP
+
+  - id: block-truncate-prod
+    description: "Block TRUNCATE on production profiles"
+    scope:
+      labels:
+        env: prod
+    match:
+      first_keyword:
+        - TRUNCATE
+
+  # --- DCL: privilege escalation ---
+  - id: block-grant-revoke
+    description: "Block GRANT and REVOKE"
+    scope: global
+    match:
+      first_keyword:
+        - GRANT
+        - REVOKE
+
+  # --- Dangerous patterns that bypass first-keyword detection ---
+
+  # Block Oracle internal performance views.
+  - id: block-vsql
+    description: "Block V$SQL and GV$SQL queries for performance reasons"
+    scope: global
+    match:
+      regex: "(?i)\\bG?V\\$SQL\\b|\\bV_\\$SQL\\b"
+
+  # Block PL/pgSQL anonymous blocks — DML can be hidden inside.
+  - id: block-anonymous-blocks
+    description: "Block PL/pgSQL / PL/SQL anonymous blocks"
+    scope: global
+    match:
+      regex: "(?i)^\\s*DO\\s+\\$\\$|^\\s*BEGIN\\s+.+;\\s*END"
+
+  # Block writable CTEs: WITH ... (INSERT/UPDATE/DELETE) SELECT.
+  - id: block-writable-cte
+    description: "Block CTEs containing DML"
+    scope: global
+    match:
+      regex: "(?i)\\bWITH\\b.+\\b(INSERT|UPDATE|DELETE|MERGE)\\b"
+
+  # Block stored procedure / function calls that commonly wrap writes.
+  - id: block-exec
+    description: "Block EXEC / EXECUTE / CALL"
+    scope: global
+    match:
+      first_keyword:
+        - EXEC
+        - EXECUTE
+        - CALL
+
+  # Block SET TRANSACTION READ WRITE which opens a write transaction.
+  - id: block-set-transaction-write
+    description: "Block SET TRANSACTION READ WRITE"
+    scope: global
+    match:
+      regex: "(?i)^\\s*SET\\s+TRANSACTION\\s+.*\\bREAD\\s+WRITE\\b"
