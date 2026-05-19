@@ -16,18 +16,28 @@ import java.util.Optional;
 public class CredentialStore {
     private final ObjectMapper objectMapper;
     private final Path credentialPath;
+    private final CredentialCipher cipher;
     private final Map<String, CredentialEntry> credentials = new HashMap<>();
 
     @Autowired
     public CredentialStore(ObjectMapper objectMapper, Environment environment) {
         this.objectMapper = objectMapper;
-        this.credentialPath = dataDir(environment).resolve("credentials.json");
+        Path dataDir = dataDir(environment);
+        this.credentialPath = dataDir.resolve("credentials.json");
+        this.cipher = CredentialCipher.fromEnvironment(dataDir);
         load();
     }
 
+    /** Test / no-encryption constructor. */
     public CredentialStore(ObjectMapper objectMapper, Path credentialPath) {
+        this(objectMapper, credentialPath, null);
+    }
+
+    /** Full constructor; {@code cipher} may be null for plaintext-only operation. */
+    public CredentialStore(ObjectMapper objectMapper, Path credentialPath, CredentialCipher cipher) {
         this.objectMapper = objectMapper;
         this.credentialPath = credentialPath;
+        this.cipher = cipher;
         load();
     }
 
@@ -74,9 +84,29 @@ public class CredentialStore {
         }
         try {
             StoreFile file = objectMapper.readValue(credentialPath.toFile(), StoreFile.class);
-            if (file.credentials != null) {
-                credentials.clear();
-                credentials.putAll(file.credentials);
+            if (file.credentials == null) {
+                return;
+            }
+            credentials.clear();
+            boolean needsMigration = false;
+            for (Map.Entry<String, StoredEntry> storedEntry : file.credentials.entrySet()) {
+                StoredEntry stored = storedEntry.getValue();
+                CredentialEntry entry = new CredentialEntry();
+                entry.username = stored.username;
+                if (stored.encryptedPassword != null && cipher != null) {
+                    entry.password = cipher.decrypt(stored.encryptedPassword);
+                } else if (stored.encryptedPassword != null) {
+                    // cipher unavailable — cannot decrypt, skip entry
+                    continue;
+                } else {
+                    // legacy plaintext entry — migrate on next flush
+                    entry.password = stored.password;
+                    needsMigration = true;
+                }
+                credentials.put(storedEntry.getKey(), entry);
+            }
+            if (needsMigration) {
+                flush();
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to load credentials", e);
@@ -91,7 +121,17 @@ public class CredentialStore {
             }
             StoreFile file = new StoreFile();
             file.version = 1;
-            file.credentials = new HashMap<>(credentials);
+            file.credentials = new HashMap<>();
+            for (Map.Entry<String, CredentialEntry> entry : credentials.entrySet()) {
+                StoredEntry stored = new StoredEntry();
+                stored.username = entry.getValue().username;
+                if (cipher != null) {
+                    stored.encryptedPassword = cipher.encrypt(entry.getValue().password);
+                } else {
+                    stored.password = entry.getValue().password;
+                }
+                file.credentials.put(entry.getKey(), stored);
+            }
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(credentialPath.toFile(), file);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to save credentials", e);
@@ -103,8 +143,14 @@ public class CredentialStore {
         public String password;
     }
 
+    private static class StoredEntry {
+        public String username;
+        public String password;          // null when encrypted
+        public String encryptedPassword; // null for legacy plaintext entries
+    }
+
     private static class StoreFile {
         public int version = 1;
-        public Map<String, CredentialEntry> credentials = new HashMap<>();
+        public Map<String, StoredEntry> credentials = new HashMap<>();
     }
 }
