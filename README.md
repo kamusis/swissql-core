@@ -312,6 +312,7 @@ All configuration is done via environment variables. Spring properties (e.g. in 
 | `SWISSQL_AUDIT_LOG_LEVEL` | `INFO` | Audit log level. Set to `OFF` to disable SQL audit logging entirely |
 | `SWISSQL_AUDIT_LOG_DIR` | _(empty)_ | When set, audit entries are written to a rolling file `audit.log` in this directory. When unset, audit entries go to stdout with an `[AUDIT]` prefix |
 | `SWISSQL_DATA_DIR` | `./data` | Directory for `connections.json` and `credentials.json` |
+| `SWISSQL_CREDENTIAL_KEY` | _(auto-generated)_ | AES-256 key for `credentials.json` encryption. Base64-encoded 32 bytes, or any string (SHA-256-hashed to 32 bytes). If unset, a random key is generated and stored at `{SWISSQL_DATA_DIR}/.credential_key`. Set this in production to keep the key separate from the data directory. |
 | `SWISSQL_POOL_MAX_SIZE` | `5` | HikariCP max pool size per connection profile |
 | `SWISSQL_POOL_MIN_IDLE` | `1` | HikariCP min idle connections per connection profile |
 | `SWISSQL_POOL_CONNECTION_TIMEOUT_MS` | `5000` | HikariCP connection acquisition timeout (ms) |
