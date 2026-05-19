@@ -146,10 +146,11 @@ func ruleInfoToRow(r client.RuleInfo) map[string]interface{} {
 	return map[string]interface{}{
 		"id":          r.ID,
 		"description": r.Description,
-		"scope":       fmt.Sprintf("%v", r.Scope),
-		"match":       fmt.Sprintf("%v", r.Match),
+		"scope":       r.Scope,
+		"match":       r.Match,
 	}
 }
+
 
 func init() {
 	rootCmd.AddCommand(rulesCmd)
