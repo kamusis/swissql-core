@@ -88,10 +88,16 @@ public class SqlRuleLoader {
         List<SqlRule> denyRules = parseRules(denyRaw, "deny", source);
         List<SqlRule> allowRules = parseRules(allowRaw, "allow", source);
 
-        // Validate default_rule_id uniqueness across all rules
+        // Validate id uniqueness across deny + allow lists, and against default_rule_id
         Map<String, String> allIds = new LinkedHashMap<>();
         for (SqlRule r : denyRules) allIds.put(r.id(), "deny");
-        for (SqlRule r : allowRules) allIds.put(r.id(), "allow");
+        for (SqlRule r : allowRules) {
+            if (allIds.containsKey(r.id())) {
+                throw new CoreApiException("SQL_RULES_LOAD_FAILED", HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Duplicate rule id '" + r.id() + "' across deny and allow lists in " + source);
+            }
+            allIds.put(r.id(), "allow");
+        }
         if (allIds.containsKey(defaultRuleId)) {
             throw new CoreApiException("SQL_RULES_LOAD_FAILED", HttpStatus.INTERNAL_SERVER_ERROR,
                     "default_rule_id '" + defaultRuleId + "' must not duplicate any rule id in " + source);

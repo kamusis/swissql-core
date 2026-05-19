@@ -378,6 +378,24 @@ class SqlRuleEngineTest {
         assertThat(d.matchedRuleId()).isEqualTo("first-block");
     }
 
+    @Test
+    void null_profile_labels_does_not_throw_on_label_scoped_rule() {
+        SqlRuleSet rules = rules("allow", "default-allow",
+                List.of(denyRule("block-prod", SqlRuleScope.labels(Map.of("env", "prod")),
+                        List.of("TRUNCATE"), null)),
+                List.of());
+
+        ConnectionProfile profileWithNullLabels = new ConnectionProfile();
+        profileWithNullLabels.setProfileId("p1");
+        profileWithNullLabels.setLabels(null);
+
+        SqlRuleDecision d = engine(rules).evaluate("TRUNCATE t", profileWithNullLabels);
+
+        // null labels → label scope does not match → default allow
+        assertThat(d.allowed()).isTrue();
+        assertThat(d.defaultActionUsed()).isTrue();
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

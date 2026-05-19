@@ -8,6 +8,7 @@ import com.swissql.model.ConnectionProfile;
 import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,12 +30,12 @@ public class SqlRulesController {
     }
 
     @GetMapping
-    public SqlRulesResponse getRules() {
+    public ResponseEntity<SqlRulesResponse> getRules() {
         SqlRuleSet rules = ruleEngine.getActiveRuleSet();
         if (rules == null) {
-            return SqlRulesResponse.fallback();
+            return ResponseEntity.ok(SqlRulesResponse.fallback());
         }
-        return new SqlRulesResponse(
+        return ResponseEntity.ok(new SqlRulesResponse(
                 rules.version(),
                 rules.defaultAction(),
                 rules.defaultRuleId(),
@@ -43,12 +44,11 @@ public class SqlRulesController {
                 rules.source(),
                 rules.loadedAt(),
                 null
-        );
+        ));
     }
 
     @PostMapping("/reload")
-    public SqlRulesReloadResponse reload() {
-        SqlRuleSet previous = ruleEngine.getActiveRuleSet();
+    public ResponseEntity<SqlRulesReloadResponse> reload() {
         try {
             ruleEngine.reload();
         } catch (CoreApiException e) {
@@ -58,16 +58,16 @@ public class SqlRulesController {
                     "Rules reload failed: " + e.getMessage());
         }
         SqlRuleSet current = ruleEngine.getActiveRuleSet();
-        return new SqlRulesReloadResponse(
+        return ResponseEntity.ok(new SqlRulesReloadResponse(
                 true,
                 current != null ? current.source() : "builtin-fallback",
                 current != null ? current.denyRules().size() : 0,
                 current != null ? current.allowRules().size() : 0
-        );
+        ));
     }
 
     @PostMapping("/validate")
-    public SqlRulesValidateResponse validate(@RequestBody SqlRulesValidateRequest request) {
+    public ResponseEntity<SqlRulesValidateResponse> validate(@RequestBody SqlRulesValidateRequest request) {
         if (request.sql() == null || request.sql().isBlank()) {
             throw new CoreApiException("INVALID_REQUEST", HttpStatus.BAD_REQUEST, "SQL is required");
         }
@@ -82,7 +82,7 @@ public class SqlRulesController {
         String profileId = profile != null ? profile.getProfileId() : null;
         Map<String, String> labels = profile != null ? profile.getLabels() : null;
 
-        return new SqlRulesValidateResponse(
+        return ResponseEntity.ok(new SqlRulesValidateResponse(
                 decision.allowed(),
                 decision.action(),
                 decision.matchedRuleId(),
@@ -92,6 +92,6 @@ public class SqlRulesController {
                 decision.requestAllowWriteRequired(),
                 profileId,
                 labels
-        );
+        ));
     }
 }

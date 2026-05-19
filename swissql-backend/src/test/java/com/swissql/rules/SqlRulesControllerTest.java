@@ -1,6 +1,8 @@
 package com.swissql.rules;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swissql.api.SqlRulesReloadResponse;
+import com.swissql.api.SqlRulesResponse;
 import com.swissql.api.SqlRulesValidateRequest;
 import com.swissql.api.SqlRulesValidateResponse;
 import com.swissql.model.ConnectionProfile;
@@ -38,7 +40,7 @@ class SqlRulesControllerTest {
                 List.of());
         SqlRulesController controller = controller(new SqlRuleEngine(rules), null);
 
-        var response = controller.getRules();
+        SqlRulesResponse response = controller.getRules().getBody();
 
         assertThat(response.version()).isEqualTo("1");
         assertThat(response.defaultAction()).isEqualTo("deny");
@@ -54,7 +56,7 @@ class SqlRulesControllerTest {
     void getRules_returns_fallback_metadata_when_no_file() {
         SqlRulesController controller = controller(SqlRuleEngine.fallback(), null);
 
-        var response = controller.getRules();
+        SqlRulesResponse response = controller.getRules().getBody();
 
         assertThat(response.source()).isEqualTo("builtin-fallback");
         assertThat(response.mode()).isEqualTo("fallback");
@@ -75,7 +77,7 @@ class SqlRulesControllerTest {
         when(loader.load()).thenReturn(rules);
         SqlRuleEngine engine = new SqlRuleEngine(loader);
 
-        var response = controller(engine, loader).reload();
+        SqlRulesReloadResponse response = controller(engine, loader).reload().getBody();
 
         assertThat(response.reloaded()).isTrue();
         assertThat(response.denyCount()).isEqualTo(1);
@@ -115,7 +117,7 @@ class SqlRulesControllerTest {
         SqlRulesController controller = controller(new SqlRuleEngine(rules), null);
 
         SqlRulesValidateRequest req = new SqlRulesValidateRequest("DROP TABLE t", null, false);
-        SqlRulesValidateResponse resp = controller.validate(req);
+        SqlRulesValidateResponse resp = controller.validate(req).getBody();
 
         assertThat(resp.allowed()).isFalse();
         assertThat(resp.action()).isEqualTo("deny");
@@ -140,11 +142,11 @@ class SqlRulesControllerTest {
 
         // Global rule fires
         SqlRulesValidateRequest dropReq = new SqlRulesValidateRequest("DROP TABLE t", null, false);
-        assertThat(controller.validate(dropReq).allowed()).isFalse();
+        assertThat(controller.validate(dropReq).getBody().allowed()).isFalse();
 
         // Label-scoped rule skipped (no profile)
         SqlRulesValidateRequest truncReq = new SqlRulesValidateRequest("TRUNCATE t", null, false);
-        assertThat(controller.validate(truncReq).allowed()).isTrue();
+        assertThat(controller.validate(truncReq).getBody().allowed()).isTrue();
     }
 
     @Test
@@ -165,7 +167,7 @@ class SqlRulesControllerTest {
         SqlRulesController controller = new SqlRulesController(new SqlRuleEngine(rules), profileService);
 
         SqlRulesValidateRequest req = new SqlRulesValidateRequest("TRUNCATE invoices", "billing-prod", false);
-        SqlRulesValidateResponse resp = controller.validate(req);
+        SqlRulesValidateResponse resp = controller.validate(req).getBody();
 
         assertThat(resp.allowed()).isFalse();
         assertThat(resp.matchedRuleId()).isEqualTo("block-prod-truncate");
@@ -179,7 +181,7 @@ class SqlRulesControllerTest {
         SqlRulesController controller = controller(new SqlRuleEngine(rules), null);
 
         SqlRulesValidateRequest req = new SqlRulesValidateRequest("SELECT 1", null, false);
-        SqlRulesValidateResponse resp = controller.validate(req);
+        SqlRulesValidateResponse resp = controller.validate(req).getBody();
 
         assertThat(resp.allowed()).isFalse();
         assertThat(resp.matchedRuleId()).isEqualTo("default-deny");
@@ -192,7 +194,7 @@ class SqlRulesControllerTest {
         SqlRulesController controller = controller(new SqlRuleEngine(rules), null);
 
         SqlRulesValidateRequest req = new SqlRulesValidateRequest("DELETE FROM t", null, false);
-        SqlRulesValidateResponse resp = controller.validate(req);
+        SqlRulesValidateResponse resp = controller.validate(req).getBody();
 
         assertThat(resp.allowed()).isTrue();
         assertThat(resp.writeLike()).isTrue();

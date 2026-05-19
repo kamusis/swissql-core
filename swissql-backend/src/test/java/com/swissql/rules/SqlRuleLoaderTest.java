@@ -348,6 +348,33 @@ class SqlRuleLoaderTest {
         assertThat(rules.source()).isEqualTo(file.toString());
     }
 
+    @Test
+    void duplicate_rule_id_across_deny_and_allow_lists_fails() throws Exception {
+        Path file = writeYaml("""
+                version: "1"
+                default_action: allow
+                default_rule_id: default-allow
+                deny:
+                  - id: shared-id
+                    scope: global
+                    match:
+                      first_keyword:
+                        - DROP
+                allow:
+                  - id: shared-id
+                    scope: global
+                    match:
+                      first_keyword:
+                        - SELECT
+                """);
+
+        assertThatThrownBy(() -> new SqlRuleLoader(file).load())
+                .isInstanceOf(CoreApiException.class)
+                .hasMessageContaining("Duplicate rule id")
+                .hasMessageContaining("shared-id")
+                .hasMessageContaining("across deny and allow lists");
+    }
+
     // -------------------------------------------------------------------------
     // Helper
     // -------------------------------------------------------------------------

@@ -137,6 +137,7 @@ public class SqlRuleEngine {
             case SqlRuleScope.Labels(Map<String, String> required) -> {
                 if (profile == null) yield false;
                 Map<String, String> profileLabels = profile.getLabels();
+                if (profileLabels == null) yield false;
                 yield required.entrySet().stream()
                         .allMatch(e -> e.getValue().equals(profileLabels.get(e.getKey())));
             }
