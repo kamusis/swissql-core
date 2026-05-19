@@ -185,6 +185,58 @@ type CapabilitiesResponse struct {
 	TraceId          string   `json:"trace_id"`
 }
 
+// ---------------------------------------------------------------------------
+// Rules types
+// ---------------------------------------------------------------------------
+
+// RuleInfo represents a single SQL rule entry as returned by GET /v1/sql/rules.
+type RuleInfo struct {
+	ID          string      `json:"id"`
+	Description string      `json:"description"`
+	Scope       interface{} `json:"scope"`
+	Match       interface{} `json:"match"`
+}
+
+// RulesListResponse is the response for GET /v1/sql/rules.
+type RulesListResponse struct {
+	Version       string     `json:"version"`
+	DefaultAction string     `json:"default_action"`
+	DefaultRuleID string     `json:"default_rule_id"`
+	DenyRules     []RuleInfo `json:"deny_rules"`
+	AllowRules    []RuleInfo `json:"allow_rules"`
+	Source        string     `json:"source"`
+	LoadedAt      string     `json:"loaded_at"`
+	Mode          string     `json:"mode"`
+}
+
+// RulesReloadResponse is the response for POST /v1/sql/rules/reload.
+type RulesReloadResponse struct {
+	Reloaded   bool   `json:"reloaded"`
+	Source     string `json:"source"`
+	DenyCount  int    `json:"deny_count"`
+	AllowCount int    `json:"allow_count"`
+}
+
+// RulesValidateRequest is the request body for POST /v1/sql/rules/validate.
+type RulesValidateRequest struct {
+	SQL        string `json:"sql"`
+	ProfileID  string `json:"profile_id,omitempty"`
+	AllowWrite bool   `json:"allow_write,omitempty"`
+}
+
+// RulesValidateResponse is the response for POST /v1/sql/rules/validate.
+type RulesValidateResponse struct {
+	Allowed                   bool              `json:"allowed"`
+	Action                    string            `json:"action"`
+	MatchedRuleID             string            `json:"matched_rule_id"`
+	MatchedRuleDescription    string            `json:"matched_rule_description"`
+	DefaultActionUsed         bool              `json:"default_action_used"`
+	WriteLike                 bool              `json:"write_like"`
+	RequestAllowWriteRequired bool              `json:"request_allow_write_required"`
+	ProfileID                 string            `json:"profile_id"`
+	Labels                    map[string]string `json:"labels"`
+}
+
 // ConnectionsListFilter holds optional server-side filter parameters for ConnectionsListFiltered.
 type ConnectionsListFilter struct {
 	DbType       string
@@ -499,6 +551,61 @@ func (c *Client) GetCapabilities() (*CapabilitiesResponse, error) {
 	defer body.Close()
 
 	var resp CapabilitiesResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RulesExamples downloads an example SQL rules YAML from the backend (GET /v1/sql/rules/examples?mode=...).
+// The caller is responsible for closing the returned ReadCloser.
+func (c *Client) RulesExamples(mode string) (io.ReadCloser, error) {
+	urlStr := fmt.Sprintf("%s/v1/sql/rules/examples?mode=%s", c.BaseURL, mode)
+	return c.get(urlStr)
+}
+
+// RulesList fetches the active SQL rule set from the backend (GET /v1/sql/rules).
+func (c *Client) RulesList() (*RulesListResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/sql/rules", c.BaseURL)
+	body, err := c.get(urlStr)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp RulesListResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RulesReload triggers a hot reload of the SQL rule set (POST /v1/sql/rules/reload).
+func (c *Client) RulesReload() (*RulesReloadResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/sql/rules/reload", c.BaseURL)
+	body, err := c.post(urlStr, map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp RulesReloadResponse
+	if err := json.NewDecoder(body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// RulesValidate validates a SQL statement against the active rule set (POST /v1/sql/rules/validate).
+func (c *Client) RulesValidate(req *RulesValidateRequest) (*RulesValidateResponse, error) {
+	urlStr := fmt.Sprintf("%s/v1/sql/rules/validate", c.BaseURL)
+	body, err := c.post(urlStr, req)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	var resp RulesValidateResponse
 	if err := json.NewDecoder(body).Decode(&resp); err != nil {
 		return nil, err
 	}

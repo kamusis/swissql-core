@@ -10,6 +10,7 @@ import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.time.Instant;
 import java.util.List;
@@ -199,6 +200,52 @@ class SqlRulesControllerTest {
         assertThat(resp.allowed()).isTrue();
         assertThat(resp.writeLike()).isTrue();
         assertThat(resp.requestAllowWriteRequired()).isTrue();
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /v1/sql/rules/examples?mode=blacklist|whitelist
+    // -------------------------------------------------------------------------
+
+    @Test
+    void getExamples_blacklist_returns_plaintext_yaml() {
+        SqlRulesController controller = controller(SqlRuleEngine.fallback(), null);
+
+        ResponseEntity<String> response = controller.getExamples("blacklist");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getHeaders().getContentType().toString())
+                .startsWith("text/plain");
+        assertThat(response.getBody()).contains("default_action: allow");
+    }
+
+    @Test
+    void getExamples_whitelist_returns_plaintext_yaml() {
+        SqlRulesController controller = controller(SqlRuleEngine.fallback(), null);
+
+        ResponseEntity<String> response = controller.getExamples("whitelist");
+
+        assertThat(response.getStatusCode().value()).isEqualTo(200);
+        assertThat(response.getBody()).contains("default_action: deny");
+    }
+
+    @Test
+    void getExamples_invalid_mode_throws_400() {
+        SqlRulesController controller = controller(SqlRuleEngine.fallback(), null);
+
+        assertThatThrownBy(() -> controller.getExamples("invalid"))
+                .isInstanceOf(CoreApiException.class)
+                .satisfies(ex -> assertThat(((CoreApiException) ex).getStatus())
+                        .isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    void getExamples_null_mode_throws_400() {
+        SqlRulesController controller = controller(SqlRuleEngine.fallback(), null);
+
+        assertThatThrownBy(() -> controller.getExamples(null))
+                .isInstanceOf(CoreApiException.class)
+                .satisfies(ex -> assertThat(((CoreApiException) ex).getStatus())
+                        .isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
     // -------------------------------------------------------------------------

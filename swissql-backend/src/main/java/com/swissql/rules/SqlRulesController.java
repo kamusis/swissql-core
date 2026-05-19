@@ -7,14 +7,19 @@ import com.swissql.api.SqlRulesValidateResponse;
 import com.swissql.model.ConnectionProfile;
 import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
@@ -64,6 +69,25 @@ public class SqlRulesController {
                 current != null ? current.denyRules().size() : 0,
                 current != null ? current.allowRules().size() : 0
         ));
+    }
+
+    @GetMapping("/examples")
+    public ResponseEntity<String> getExamples(@RequestParam(name = "mode", required = false) String mode) {
+        if (mode == null || (!mode.equals("blacklist") && !mode.equals("whitelist"))) {
+            throw new CoreApiException("INVALID_MODE", HttpStatus.BAD_REQUEST,
+                    "mode must be 'blacklist' or 'whitelist'");
+        }
+        String resourceName = "sql-rules-" + mode + ".example.yaml";
+        try {
+            ClassPathResource resource = new ClassPathResource(resourceName);
+            byte[] bytes = resource.getInputStream().readAllBytes();
+            return ResponseEntity.ok()
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body(new String(bytes, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new CoreApiException("EXAMPLE_NOT_FOUND", HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not read example file: " + resourceName);
+        }
     }
 
     @PostMapping("/validate")
