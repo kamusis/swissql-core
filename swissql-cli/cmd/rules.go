@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/kamusis/swissql/swissql-cli/internal/client"
 	"github.com/spf13/cobra"
@@ -32,35 +33,9 @@ var rulesListCmd = &cobra.Command{
 				resp.Version, resp.Source, resp.DefaultAction, resp.DefaultRuleID)
 		}
 
-		// Render deny rules table.
-		denyRows := make([]map[string]interface{}, 0, len(resp.DenyRules))
-		for _, r := range resp.DenyRules {
-			denyRows = append(denyRows, ruleInfoToRow(r))
-		}
-		fmt.Fprintf(w, "Deny rules (%d):\n", len(denyRows))
-		renderResponseToWriter(cmd, w, &client.ExecuteResponse{
-			Type: "tabular",
-			Data: client.DataContent{
-				Columns: ruleColumns(),
-				Rows:    denyRows,
-			},
-			Metadata: client.ResponseMetadata{RowsAffected: len(denyRows)},
-		}, shouldForcePlainBorders(cmd, false))
-
-		// Render allow rules table.
-		allowRows := make([]map[string]interface{}, 0, len(resp.AllowRules))
-		for _, r := range resp.AllowRules {
-			allowRows = append(allowRows, ruleInfoToRow(r))
-		}
-		fmt.Fprintf(w, "\nAllow rules (%d):\n", len(allowRows))
-		renderResponseToWriter(cmd, w, &client.ExecuteResponse{
-			Type: "tabular",
-			Data: client.DataContent{
-				Columns: ruleColumns(),
-				Rows:    allowRows,
-			},
-			Metadata: client.ResponseMetadata{RowsAffected: len(allowRows)},
-		}, shouldForcePlainBorders(cmd, false))
+		renderRuleSection(cmd, w, "Deny", resp.DenyRules)
+		fmt.Fprintln(w)
+		renderRuleSection(cmd, w, "Allow", resp.AllowRules)
 
 		return nil
 	},
@@ -108,6 +83,7 @@ var rulesValidateCmd = &cobra.Command{
 				"write_like":                   resp.WriteLike,
 				"request_allow_write_required": resp.RequestAllowWriteRequired,
 				"profile_id":                   resp.ProfileID,
+				"labels":                       resp.Labels,
 			},
 		}
 		renderResponseToWriter(cmd, cmd.OutOrStdout(), &client.ExecuteResponse{
@@ -122,6 +98,7 @@ var rulesValidateCmd = &cobra.Command{
 					{Name: "write_like", Type: "boolean"},
 					{Name: "request_allow_write_required", Type: "boolean"},
 					{Name: "profile_id", Type: "string"},
+					{Name: "labels", Type: "string"},
 				},
 				Rows: rows,
 			},
@@ -129,6 +106,23 @@ var rulesValidateCmd = &cobra.Command{
 		}, shouldForcePlainBorders(cmd, false))
 		return nil
 	},
+}
+
+// renderRuleSection renders a labelled rules table (deny or allow) to w.
+func renderRuleSection(cmd *cobra.Command, w io.Writer, label string, rules []client.RuleInfo) {
+	rows := make([]map[string]interface{}, 0, len(rules))
+	for _, r := range rules {
+		rows = append(rows, ruleInfoToRow(r))
+	}
+	fmt.Fprintf(w, "%s rules (%d):\n", label, len(rows))
+	renderResponseToWriter(cmd, w, &client.ExecuteResponse{
+		Type: "tabular",
+		Data: client.DataContent{
+			Columns: ruleColumns(),
+			Rows:    rows,
+		},
+		Metadata: client.ResponseMetadata{RowsAffected: len(rows)},
+	}, shouldForcePlainBorders(cmd, false))
 }
 
 // ruleColumns returns the column definitions for a rules table.

@@ -8,13 +8,6 @@ import (
 	"time"
 )
 
-// rulesTestServer extends the shared test-server handler with rules endpoints.
-func rulesTestServer(t *testing.T) (*capturedRequest, func()) {
-	t.Helper()
-	// We reuse the helpers already in request_paths_test.go (same package).
-	return nil, func() {}
-}
-
 func TestClient_RulesList(t *testing.T) {
 	srv, got := newTestServer(t)
 	defer srv.Close()
