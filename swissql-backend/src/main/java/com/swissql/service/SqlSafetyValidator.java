@@ -17,13 +17,19 @@ public final class SqlSafetyValidator {
     private SqlSafetyValidator() {
     }
 
-    public static void validate(String sql, boolean allowWrite) {
+    /** Validates SQL shape only (present + single statement). Does not check write-safety. */
+    public static void validateShape(String sql) {
         if (sql == null || sql.isBlank()) {
             throw new CoreApiException("INVALID_REQUEST", HttpStatus.BAD_REQUEST, "SQL is required");
         }
         if (containsMultipleStatements(sql)) {
             throw new CoreApiException("INVALID_REQUEST", HttpStatus.BAD_REQUEST, "Exactly one SQL statement is allowed");
         }
+    }
+
+    /** Legacy combined validation — shape + write-safety. Retained for backward compatibility. */
+    public static void validate(String sql, boolean allowWrite) {
+        validateShape(sql);
         if (!allowWrite && isWriteStatement(sql)) {
             throw new CoreApiException("INVALID_REQUEST", HttpStatus.BAD_REQUEST, "Write SQL requires allow_write=true");
         }
@@ -103,7 +109,7 @@ public final class SqlSafetyValidator {
         return false;
     }
 
-    static boolean isWriteStatement(String sql) {
+    public static boolean isWriteStatement(String sql) {
         String stripped = LEADING_COMMENT.matcher(sql).replaceFirst("").trim();
         if (stripped.isEmpty()) {
             return false;

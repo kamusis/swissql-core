@@ -8,7 +8,8 @@ SwissQL Core is a backend-first REST service for database connection management 
 - **SQL execution by profile** — execute SQL against a named profile; returns structured tabular or update-count results.
 - **Dynamic JDBC driver loading** — load additional database drivers at runtime from a directory without restarting the service.
 - **DBeaver project import** — import connection profiles from a `.dbp` archive via REST API.
-- **Credential resolution** — resolve passwords from environment variables (`env:`), local encrypted store (`local:`), or inline on creation.
+- **Credential resolution** — resolve passwords from environment variables (`env:`), local file store (`local:`), or inline on creation.
+- **SQL rule engine** — configurable YAML-driven blacklist/whitelist that blocks or allows SQL before execution based on statement type, regex, and connection profile labels.
 
 ## High-level architecture
 
@@ -212,6 +213,14 @@ Note: `--label` on `connections list` uses `key:value` format (colon separator) 
 |--------|------|-------------|
 | `POST` | `/v1/sql/execute` | Execute SQL against a named profile |
 
+### SQL Rules
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/sql/rules` | Get active rule set (version, default action, deny/allow rules, source, load time) |
+| `POST` | `/v1/sql/rules/reload` | Hot-reload `sql-rules.yaml` without restarting |
+| `POST` | `/v1/sql/rules/validate` | Dry-run: evaluate SQL against active rules without executing |
+
 ### Drivers
 
 | Method | Path | Description |
@@ -272,14 +281,14 @@ Note: `--label` on `connections list` uses `key:value` format (colon separator) 
 }
 ```
 
-Error codes: `INVALID_REQUEST`, `CONNECTION_NOT_FOUND`, `CONNECTION_DISABLED`, `CONNECTION_TEST_FAILED`, `CREDENTIAL_NOT_FOUND`, `DRIVER_NOT_FOUND`, `DRIVER_RELOAD_FAILED`, `SQL_EXECUTION_ERROR`, `SQL_TIMEOUT`, `PROFILE_IMPORT_FAILED`, `PROFILE_CONFLICT`.
+Error codes: `INVALID_REQUEST`, `CONNECTION_NOT_FOUND`, `CONNECTION_DISABLED`, `CONNECTION_TEST_FAILED`, `CREDENTIAL_NOT_FOUND`, `DRIVER_NOT_FOUND`, `DRIVER_RELOAD_FAILED`, `SQL_EXECUTION_ERROR`, `SQL_TIMEOUT`, `PROFILE_IMPORT_FAILED`, `PROFILE_CONFLICT`, `SQL_DENIED`, `SQL_RULES_LOAD_FAILED`, `SQL_RULES_RELOAD_FAILED`.
 
 ## Credential Resolution
 
 Passwords are never stored in plain text in the profile. Resolution order:
 
 1. **`env:<VAR_NAME>`** — read from environment variable at execution time.
-2. **`local:<profile_id>`** — read from the local encrypted credential store.
+2. **`local:<profile_id>`** — read from the local credential store (`credentials.json`). Passwords are stored as plaintext — protect this file with filesystem permissions.
 3. **Local store by profile ID** — if `credential_ref` is absent, look up by `profile_id` in the credential store.
 
 Example `credential_ref` values:
@@ -318,6 +327,7 @@ All configuration is done via environment variables. Spring properties (e.g. in 
 | `SWISSQL_POOL_CONNECTION_TIMEOUT_MS` | `5000` | HikariCP connection acquisition timeout (ms) |
 | `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_DIR` | `/jdbc_drivers` | Directory scanned for dynamic JDBC driver JARs |
 | `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_ENABLED` | `true` | Enable or disable dynamic JDBC driver loading |
+| `SWISSQL_SQL_RULES_FILE` | _(empty)_ | Explicit path to `sql-rules.yaml`. When unset, defaults to `${SWISSQL_DATA_DIR}/sql-rules.yaml`. When the file does not exist the engine runs in fallback mode (no rules enforced). |
 | `JAVA_OPTS` | _(empty)_ | Extra JVM flags, e.g. `-Xmx512m -Xms256m` |
 | `SPRING_PROFILES_ACTIVE` | _(none)_ | Active Spring profile, e.g. `local` |
 
@@ -372,6 +382,148 @@ Parameters:
 | `name_prefix` | string | — | Optional prefix for imported profile names |
 
 Credentials are not imported from DBeaver projects.
+
+## SQL Rule Engine
+
+SwissQL Core ships a configurable rule engine that evaluates every SQL statement before execution. Rules are loaded from `sql-rules.yaml` (by default `${SWISSQL_DATA_DIR}/sql-rules.yaml`). When the file does not exist the engine runs in **fallback mode**: all SQL is allowed, and only the `allow_write` gate applies as before.
+
+Two modes are supported:
+
+- **Blacklist (default-allow)** — allow everything, explicitly block what is forbidden.
+- **Whitelist (default-deny)** — deny everything, explicitly allow what is permitted.
+
+### Evaluation order
+
+1. Deny rules are evaluated in file order — first match wins.
+2. If no deny rule matched, allow rules are evaluated in file order — first match wins.
+3. If no rule matched, the `default_action` is applied.
+
+### Rule scopes
+
+| Scope | Meaning |
+|-------|---------|
+| `global` | Matches every SQL execution regardless of profile |
+| `labels: {key: value, ...}` | Matches profiles whose labels are a superset of the specified labels |
+| `profiles: [id1, id2]` | Matches only the listed profile IDs (case-sensitive) |
+
+### Match conditions
+
+Each rule must have at least one of:
+
+| Condition | Example | Notes |
+|-----------|---------|-------|
+| `first_keyword` | `[DROP, TRUNCATE]` | Case-insensitive match on the first non-whitespace token. Short-circuits before `regex`. |
+| `regex` | `"(?i)\\bG?V\\$SQL\\b"` | Applied to the full SQL string. |
+
+### Example: blacklist mode
+
+```yaml
+version: "1"
+default_action: allow
+default_rule_id: default-allow
+
+deny:
+  - id: block-drop
+    description: "Block DROP statements"
+    scope: global
+    match:
+      first_keyword: [DROP]
+
+  - id: block-truncate-prod
+    description: "Block TRUNCATE on production profiles"
+    scope:
+      labels:
+        env: prod
+    match:
+      first_keyword: [TRUNCATE]
+
+  - id: block-vsql
+    description: "Block V$SQL performance views"
+    scope: global
+    match:
+      regex: "(?i)\\bG?V\\$SQL\\b"
+```
+
+### Example: whitelist mode
+
+```yaml
+version: "1"
+default_action: deny
+default_rule_id: default-deny
+
+deny:
+  # block-vsql is needed: SELECT * FROM V$SQL would match allow-select without this.
+  - id: block-vsql
+    description: "Block V$SQL and GV$SQL queries for performance reasons"
+    scope: global
+    match:
+      regex: "(?i)\\bG?V\\$SQL\\b|\\bV_\\$SQL\\b"
+
+allow:
+  - id: allow-select
+    description: "Allow SELECT statements"
+    scope: global
+    match:
+      first_keyword: [SELECT]
+
+  - id: allow-writes-dev
+    description: "Allow write statements on dev profiles"
+    scope:
+      labels:
+        env: dev
+    match:
+      first_keyword: [INSERT, UPDATE, DELETE, TRUNCATE, CREATE, DROP, ALTER]
+```
+
+Full example files are available in `swissql-backend/src/main/resources/sql-rules-blacklist.example.yaml` and `sql-rules-whitelist.example.yaml`.
+
+### Two-gate model
+
+The rule engine and `allow_write` are independent gates. **Both** must pass for a write statement to execute:
+
+1. **Rule engine gate** — SQL must not be blocked (or must be explicitly allowed in whitelist mode).
+2. **Write gate** — Write-like SQL (INSERT, UPDATE, DELETE, DDL, etc.) additionally requires `"allow_write": true` in the execute request.
+
+This means a rule set with `default_action: allow` and no deny rules still rejects write statements unless the caller explicitly passes `allow_write: true`.
+
+### Dry-run validation
+
+Test a SQL string against the active rules without executing it:
+
+```bash
+curl -X POST http://localhost:8080/v1/sql/rules/validate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sql": "DROP TABLE invoices",
+    "profile_id": "billing-prod"
+  }'
+```
+
+Response:
+
+```json
+{
+  "allowed": false,
+  "action": "deny",
+  "matched_rule_id": "block-drop",
+  "matched_rule_description": "Block DROP statements",
+  "default_action_used": false,
+  "write_like": true,
+  "request_allow_write_required": false,
+  "profile_id": "billing-prod",
+  "labels": {"env": "prod"}
+}
+```
+
+### Hot reload
+
+Reload `sql-rules.yaml` without restarting the backend:
+
+```bash
+curl -X POST http://localhost:8080/v1/sql/rules/reload
+```
+
+If the file fails validation, the previous rule set is preserved and an error is returned.
 
 ## Oracle Wallet (OCI / Autonomous Database)
 

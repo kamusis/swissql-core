@@ -57,7 +57,7 @@ curl http://localhost:8080/v1/status
 ## Java Code Style (Backend)
 
 ### Packages
-- Package structure: `com.swissql.{controller|service|model|api|util|driver|storage|web}`
+- Package structure: `com.swissql.{controller|service|model|api|util|driver|storage|web|rules}`
 - Directory names: kebab-case (e.g., `swissql-backend/src/main/java/com/swissql/service/`)
 - Imports order: java.*, jakarta.*, org.springframework.*, third-party, com.swissql.*
 
@@ -181,6 +181,11 @@ postgres://user:password@host:5432/database
 ### SQL Execution
 - `POST /v1/sql/execute` — Execute SQL against a named profile
 
+### SQL Rules
+- `GET /v1/sql/rules` — Get active rule set (version, default action, deny/allow rules, source, loadedAt)
+- `POST /v1/sql/rules/reload` — Hot-reload `sql-rules.yaml` without restarting; preserves previous snapshot on failure
+- `POST /v1/sql/rules/validate` — Dry-run: evaluate a SQL string (and optional profile) against active rules without executing
+
 ### Drivers
 - `GET /v1/drivers` — List loaded JDBC drivers (built-in + directory-provided)
 - `POST /v1/drivers/reload` — Rescan driver directory and reload
@@ -204,7 +209,7 @@ postgres://user:password@host:5432/database
 
 Credential reference formats:
 - `env:VAR_NAME` — read from environment variable at execution time
-- `local:profile_id` — read from local encrypted credential store
+- `local:profile_id` — read from local credential store (`credentials.json`); stored as plaintext
 
 ---
 
@@ -230,10 +235,11 @@ Credential reference formats:
 ```
 ${SWISSQL_DATA_DIR:-./data}/
   connections.json   # connection profiles
-  credentials.json   # encrypted local credentials
+  credentials.json   # local credentials (plaintext — restrict file permissions)
+  sql-rules.yaml     # SQL rule engine config (optional; see SQL Rules section)
 ```
 
-Set `SWISSQL_DATA_DIR` or Spring property `swissql.data-dir` to override.
+Set `SWISSQL_DATA_DIR` or Spring property `swissql.data-dir` to override. The `sql-rules.yaml` path can also be overridden directly with `SWISSQL_SQL_RULES_FILE`.
 
 ---
 
@@ -272,7 +278,11 @@ jdbc_drivers/
 }
 ```
 
-Error codes: `INVALID_REQUEST`, `CONNECTION_NOT_FOUND`, `CONNECTION_DISABLED`, `CONNECTION_TEST_FAILED`, `CREDENTIAL_NOT_FOUND`, `DRIVER_NOT_FOUND`, `DRIVER_RELOAD_FAILED`, `SQL_EXECUTION_ERROR`, `SQL_TIMEOUT`, `PROFILE_IMPORT_FAILED`, `PROFILE_CONFLICT`.
+Error codes: `INVALID_REQUEST`, `CONNECTION_NOT_FOUND`, `CONNECTION_DISABLED`, `CONNECTION_TEST_FAILED`, `CREDENTIAL_NOT_FOUND`, `DRIVER_NOT_FOUND`, `DRIVER_RELOAD_FAILED`, `SQL_EXECUTION_ERROR`, `SQL_TIMEOUT`, `PROFILE_IMPORT_FAILED`, `PROFILE_CONFLICT`, `SQL_DENIED`, `SQL_RULES_LOAD_FAILED`, `SQL_RULES_RELOAD_FAILED`.
+
+- `SQL_DENIED` — Rule engine blocked the SQL (HTTP 403). Includes `matched_rule_id` in details.
+- `SQL_RULES_LOAD_FAILED` — `sql-rules.yaml` exists but failed to parse or validate (thrown at startup and on reload).
+- `SQL_RULES_RELOAD_FAILED` — Reload endpoint failed; previous active rule set is preserved.
 
 ---
 
@@ -293,6 +303,7 @@ Error codes: `INVALID_REQUEST`, `CONNECTION_NOT_FOUND`, `CONNECTION_DISABLED`, `
 - `SWISSQL_JDBC_DRIVERS_AUTO_LOAD_ENABLED` — Enable/disable dynamic driver loading (default: `true`)
 - `SWISSQL_SERVER_PORT` — HTTP listening port (default: `8080`)
 - `SWISSQL_LOG_LEVEL` — Application log level for `com.swissql` (default: `INFO`)
+- `SWISSQL_SQL_RULES_FILE` — Explicit path to `sql-rules.yaml`. Overrides the default `${SWISSQL_DATA_DIR}/sql-rules.yaml`. If the file does not exist, the engine runs in fallback mode (no rules; `allow_write` gate still applies).
 - `SWISSQL_POOL_MAX_SIZE` — HikariCP max pool size per profile (default: `5`)
 - `SWISSQL_POOL_MIN_IDLE` — HikariCP min idle connections per profile (default: `1`)
 - `SWISSQL_POOL_CONNECTION_TIMEOUT_MS` — HikariCP connection acquisition timeout in ms (default: `5000`)
@@ -318,6 +329,7 @@ graph TB
             CC["ConnectionController\nGET|POST|PATCH|DELETE /v1/connections"]
             DC["DriverController\nGET /v1/drivers\nPOST /v1/drivers/reload"]
             STC["StatusController\nGET /v1/status\nGET /v1/capabilities"]
+            SRC["SqlRulesController\nGET /v1/sql/rules\nPOST /v1/sql/rules/reload\nPOST /v1/sql/rules/validate"]
         end
 
         subgraph Services["Services"]
@@ -328,6 +340,12 @@ graph TB
             DIS["DbeaverImportService"]
             PCS["ProfileCredentialResolver"]
             SSV["SqlSafetyValidator"]
+            SRE["SqlRuleEngine\n(AtomicRef hot-reload)"]
+            SRL["SqlRuleLoader\n(sql-rules.yaml)"]
+        end
+
+        subgraph RulesFile["Rules File (SWISSQL_SQL_RULES_FILE)"]
+            YAML["sql-rules.yaml\n(optional)"]
         end
 
         subgraph Storage["Storage"]
@@ -366,10 +384,15 @@ graph TB
     CC --> DIS
     DC --> DS
     STC --> DR
+    SRC --> SRE
+    SRC --> CPS
 
     SES --> SSV
     SES --> CPS
     SES --> CPOOLS
+    SES --> SRE
+    SRE --> SRL
+    SRL -->|reads| YAML
 
     CPS --> FPS
     CPS --> PCS

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swissql.api.ConnectionCreateRequest;
 import com.swissql.api.SqlExecuteRequest;
 import com.swissql.driver.DriverRegistry;
+import com.swissql.rules.SqlRuleEngine;
 import com.swissql.storage.CredentialStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -78,7 +79,7 @@ class SqlExecutionServiceValidationTest {
         profileService.create(create);
 
         ConnectionPoolService poolService = new ConnectionPoolService(null, resolver, new MockEnvironment());
-        return new SqlExecutionService(profileService, poolService);
+        return new SqlExecutionService(profileService, poolService, SqlRuleEngine.fallback());
     }
 
     private SqlExecuteRequest request(String profileId, String sql) {

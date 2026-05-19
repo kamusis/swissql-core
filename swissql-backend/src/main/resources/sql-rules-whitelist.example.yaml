@@ -1,0 +1,66 @@
+# Whitelist-mode example: default_action=deny, explicitly allow what is permitted.
+# Most rules live in the allow list; deny rules handle hard blocks.
+#
+# Usage: copy to $SWISSQL_DATA_DIR/sql-rules.yaml and adjust to your environment.
+
+version: "1"
+default_action: deny
+default_rule_id: default-deny
+
+deny:
+  # Only deny rules that override an allow rule are needed here.
+  # Anything not matched by an allow rule is already denied by default_action.
+  #
+  # block-vsql is necessary: SELECT * FROM V$SQL matches allow-select without this rule.
+  - id: block-vsql
+    description: "Block V$SQL and GV$SQL queries for performance reasons"
+    scope: global
+    match:
+      regex: "(?i)\\bG?V\\$SQL\\b|\\bV_\\$SQL\\b"
+
+allow:
+  # Allow read-only statements globally.
+  - id: allow-select
+    description: "Allow SELECT statements"
+    scope: global
+    match:
+      first_keyword:
+        - SELECT
+
+  - id: allow-explain
+    description: "Allow EXPLAIN / EXPLAIN ANALYZE"
+    scope: global
+    match:
+      first_keyword:
+        - EXPLAIN
+
+  - id: allow-show
+    description: "Allow SHOW statements (session/config inspection)"
+    scope: global
+    match:
+      first_keyword:
+        - SHOW
+
+  - id: allow-describe
+    description: "Allow DESCRIBE / DESC"
+    scope: global
+    match:
+      first_keyword:
+        - DESCRIBE
+        - DESC
+
+  # Allow DML on non-production profiles (write-like SQL still requires allow_write=true).
+  - id: allow-writes-non-prod
+    description: "Allow write statements on non-production profiles"
+    scope:
+      labels:
+        env: dev
+    match:
+      first_keyword:
+        - INSERT
+        - UPDATE
+        - DELETE
+        - TRUNCATE
+        - CREATE
+        - DROP
+        - ALTER
