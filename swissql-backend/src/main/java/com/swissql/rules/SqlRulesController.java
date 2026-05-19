@@ -9,6 +9,8 @@ import com.swissql.model.ConnectionProfile;
 import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
 import com.swissql.storage.DataDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +34,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/sql/rules")
 public class SqlRulesController {
+
+    private static final Logger log = LoggerFactory.getLogger(SqlRulesController.class);
 
     private final SqlRuleEngine ruleEngine;
     private final ConnectionProfileService profileService;
@@ -89,8 +94,10 @@ public class SqlRulesController {
         }
         String resourceName = "sql-rules-" + mode + ".example.yaml";
         try {
-            ClassPathResource resource = new ClassPathResource(resourceName);
-            byte[] bytes = resource.getInputStream().readAllBytes();
+            byte[] bytes;
+            try (InputStream is = new ClassPathResource(resourceName).getInputStream()) {
+                bytes = is.readAllBytes();
+            }
             return ResponseEntity.ok()
                     .contentType(MediaType.TEXT_PLAIN)
                     .body(new String(bytes, StandardCharsets.UTF_8));
@@ -115,8 +122,10 @@ public class SqlRulesController {
         }
         String resourceName = "sql-rules-" + mode + ".example.yaml";
         try {
-            ClassPathResource resource = new ClassPathResource(resourceName);
-            byte[] bytes = resource.getInputStream().readAllBytes();
+            byte[] bytes;
+            try (InputStream is = new ClassPathResource(resourceName).getInputStream()) {
+                bytes = is.readAllBytes();
+            }
             Files.createDirectories(target.getParent());
             Files.write(target, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
@@ -127,7 +136,8 @@ public class SqlRulesController {
         try {
             ruleEngine.reload();
             reloaded = true;
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Rules reload failed after init (rules file was written): {}", e.getMessage(), e);
         }
         return ResponseEntity.ok(new SqlRulesInitResponse(target.toString(), mode, reloaded));
     }

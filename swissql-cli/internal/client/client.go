@@ -566,13 +566,18 @@ func (c *Client) GetCapabilities() (*CapabilitiesResponse, error) {
 // RulesExamples downloads an example SQL rules YAML from the backend (GET /v1/sql/rules/examples?mode=...).
 // The caller is responsible for closing the returned ReadCloser.
 func (c *Client) RulesExamples(mode string) (io.ReadCloser, error) {
-	urlStr := fmt.Sprintf("%s/v1/sql/rules/examples?mode=%s", c.BaseURL, mode)
+	params := url.Values{}
+	params.Set("mode", mode)
+	urlStr := fmt.Sprintf("%s/v1/sql/rules/examples?%s", c.BaseURL, params.Encode())
 	return c.get(urlStr)
 }
 
 // RulesInit initializes sql-rules.yaml on the backend machine (POST /v1/sql/rules/init?mode=...&force=...).
 func (c *Client) RulesInit(mode string, force bool) (*RulesInitResponse, error) {
-	urlStr := fmt.Sprintf("%s/v1/sql/rules/init?mode=%s&force=%t", c.BaseURL, mode, force)
+	params := url.Values{}
+	params.Set("mode", mode)
+	params.Set("force", fmt.Sprintf("%t", force))
+	urlStr := fmt.Sprintf("%s/v1/sql/rules/init?%s", c.BaseURL, params.Encode())
 	body, err := c.post(urlStr, nil)
 	if err != nil {
 		return nil, err
