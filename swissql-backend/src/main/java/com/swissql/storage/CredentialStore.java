@@ -22,7 +22,7 @@ public class CredentialStore {
     @Autowired
     public CredentialStore(ObjectMapper objectMapper, Environment environment) {
         this.objectMapper = objectMapper;
-        Path dataDir = dataDir(environment);
+        Path dataDir = DataDir.resolve(environment);
         this.credentialPath = dataDir.resolve("credentials.json");
         this.cipher = CredentialCipher.fromEnvironment(dataDir);
         load();
@@ -64,18 +64,6 @@ public class CredentialStore {
         if (credentials.remove(profileId) != null) {
             flush();
         }
-    }
-
-    private static Path dataDir(Environment environment) {
-        String envDir = System.getenv("SWISSQL_DATA_DIR");
-        if (envDir != null && !envDir.isBlank()) {
-            return Path.of(envDir);
-        }
-        String propertyDir = environment.getProperty("swissql.data-dir");
-        if (propertyDir != null && !propertyDir.isBlank()) {
-            return Path.of(propertyDir);
-        }
-        return Path.of("data");
     }
 
     private void load() {
