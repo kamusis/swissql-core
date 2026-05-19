@@ -75,6 +75,21 @@ func newTestServer(t *testing.T) (*httptest.Server, *[]capturedRequest) {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/capabilities":
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(CapabilitiesResponse{Version: "core-v1"})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/sql/rules":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(RulesListResponse{
+				DefaultAction: "allow",
+				DefaultRuleID: "builtin-allow",
+				DenyRules:     []RuleInfo{},
+				AllowRules:    []RuleInfo{},
+				Source:        "builtin-fallback",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/sql/rules/reload":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(RulesReloadResponse{Reloaded: true, Source: "file"})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/sql/rules/validate":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(RulesValidateResponse{Allowed: true, Action: "allow", MatchedRuleID: "allow-select"})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
