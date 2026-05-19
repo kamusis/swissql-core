@@ -101,7 +101,9 @@ public class CredentialStore {
                 } else {
                     // legacy plaintext entry — migrate on next flush
                     entry.password = stored.password;
-                    needsMigration = true;
+                    if (cipher != null && stored.password != null) {
+                        needsMigration = true;
+                    }
                 }
                 credentials.put(storedEntry.getKey(), entry);
             }

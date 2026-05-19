@@ -89,6 +89,28 @@ class CredentialStoreEncryptionTest {
         assertThat(migratedJson).contains("encryptedPassword");
     }
 
+    @Test
+    void doesNotCrashOnLegacyEntryWithNullPassword() throws Exception {
+        String legacyJson = """
+                {
+                  "version" : 1,
+                  "credentials" : {
+                    "p1" : {
+                      "username" : "alice"
+                    }
+                  }
+                }
+                """;
+        Path credFile = tempDir.resolve("credentials.json");
+        Files.writeString(credFile, legacyJson);
+
+        CredentialCipher cipher = testCipher();
+        CredentialStore store = new CredentialStore(new ObjectMapper(), credFile, cipher);
+
+        assertThat(store.get("p1")).isPresent();
+        assertThat(store.get("p1").get().password).isNull();
+    }
+
     private static CredentialCipher testCipher() throws GeneralSecurityException {
         KeyGenerator kg = KeyGenerator.getInstance("AES");
         kg.init(256);
