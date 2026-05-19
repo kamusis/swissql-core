@@ -8,7 +8,8 @@ import com.swissql.api.SqlRulesValidateResponse;
 import com.swissql.model.ConnectionProfile;
 import com.swissql.service.ConnectionProfileService;
 import com.swissql.service.CoreApiException;
-import org.springframework.beans.factory.annotation.Value;
+import com.swissql.storage.DataDir;
+import org.springframework.core.env.Environment;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -33,14 +34,14 @@ public class SqlRulesController {
 
     private final SqlRuleEngine ruleEngine;
     private final ConnectionProfileService profileService;
-    private final String dataDir;
+    private final Path dataDir;
 
     public SqlRulesController(SqlRuleEngine ruleEngine,
                               ConnectionProfileService profileService,
-                              @Value("${swissql.data-dir:${user.home}/.swissql}") String dataDir) {
+                              Environment environment) {
         this.ruleEngine = ruleEngine;
         this.profileService = profileService;
-        this.dataDir = dataDir;
+        this.dataDir = DataDir.resolve(environment);
     }
 
     @GetMapping
@@ -107,7 +108,7 @@ public class SqlRulesController {
             throw new CoreApiException("INVALID_MODE", HttpStatus.BAD_REQUEST,
                     "mode must be 'blacklist' or 'whitelist'");
         }
-        Path target = Path.of(dataDir, "sql-rules.yaml");
+        Path target = dataDir.resolve("sql-rules.yaml");
         if (!force && Files.exists(target)) {
             throw new CoreApiException("FILE_EXISTS", HttpStatus.CONFLICT,
                     target + " already exists (use force=true to overwrite)");

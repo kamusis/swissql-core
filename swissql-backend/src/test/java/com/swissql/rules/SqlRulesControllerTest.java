@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -168,7 +169,9 @@ class SqlRulesControllerTest {
         ConnectionProfileService profileService = mock(ConnectionProfileService.class);
         when(profileService.getRequired("billing-prod")).thenReturn(prodProfile);
 
-        SqlRulesController controller = new SqlRulesController(new SqlRuleEngine(rules), profileService, System.getProperty("java.io.tmpdir"));
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("swissql.data-dir", System.getProperty("java.io.tmpdir"));
+        SqlRulesController controller = new SqlRulesController(new SqlRuleEngine(rules), profileService, env);
 
         SqlRulesValidateRequest req = new SqlRulesValidateRequest("TRUNCATE invoices", "billing-prod", false);
         SqlRulesValidateResponse resp = controller.validate(req).getBody();
@@ -312,11 +315,13 @@ class SqlRulesControllerTest {
     // -------------------------------------------------------------------------
 
     private SqlRulesController controller(SqlRuleEngine engine, SqlRuleLoader loader) {
-        return new SqlRulesController(engine, null, null);
+        return new SqlRulesController(engine, null, new MockEnvironment());
     }
 
     private SqlRulesController controllerWithDataDir(SqlRuleEngine engine, Path dataDir) {
-        return new SqlRulesController(engine, null, dataDir.toString());
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("swissql.data-dir", dataDir.toString());
+        return new SqlRulesController(engine, null, env);
     }
 
     private SqlRuleSet rules(String defaultAction, String defaultRuleId,

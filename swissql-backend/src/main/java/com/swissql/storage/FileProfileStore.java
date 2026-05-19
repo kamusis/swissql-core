@@ -25,7 +25,7 @@ public class FileProfileStore implements ProfileStore {
     @Autowired
     public FileProfileStore(ObjectMapper objectMapper, Environment environment) {
         this.objectMapper = objectMapper;
-        this.profilePath = dataDir(environment).resolve("connections.json");
+        this.profilePath = DataDir.resolve(environment).resolve("connections.json");
         load();
     }
 
@@ -63,18 +63,6 @@ public class FileProfileStore implements ProfileStore {
             return true;
         }
         return false;
-    }
-
-    private static Path dataDir(Environment environment) {
-        String envDir = System.getenv("SWISSQL_DATA_DIR");
-        if (envDir != null && !envDir.isBlank()) {
-            return Path.of(envDir);
-        }
-        String propertyDir = environment.getProperty("swissql.data-dir");
-        if (propertyDir != null && !propertyDir.isBlank()) {
-            return Path.of(propertyDir);
-        }
-        return Path.of("data");
     }
 
     private void load() {

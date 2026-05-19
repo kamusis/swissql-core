@@ -1,9 +1,11 @@
 package com.swissql.rules;
 
 import com.swissql.service.CoreApiException;
+import com.swissql.storage.DataDir;
 import com.swissql.util.IdValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
@@ -33,9 +35,9 @@ public class SqlRuleLoader {
 
     @Autowired
     public SqlRuleLoader(@Value("${swissql.sql-rules-file:}") String rulesFile,
-                         @Value("${swissql.data-dir:${user.home}/.swissql}") String dataDir) {
+                         Environment environment) {
         if (rulesFile == null || rulesFile.isBlank()) {
-            this.rulesFilePath = Path.of(dataDir, "sql-rules.yaml");
+            this.rulesFilePath = DataDir.resolve(environment).resolve("sql-rules.yaml");
         } else {
             this.rulesFilePath = Path.of(rulesFile);
         }
